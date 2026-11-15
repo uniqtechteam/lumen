@@ -1,0 +1,5 @@
+[
+  {"users": 10, "posts": 50, "include": {"ms": 0.45, "statements": 2}, "loop": {"ms": 0.84, "statements": 11}},
+  {"users": 100, "posts": 500, "include": {"ms": 0.38, "statements": 2}, "loop": {"ms": 3.60, "statements": 101}},
+  {"users": 1000, "posts": 5000, "include": {"ms": 3.24, "statements": 2}, "loop": {"ms": 67.95, "statements": 1001}}
+]

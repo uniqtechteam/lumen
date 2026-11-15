@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="310" font-family="system-ui, sans-serif" font-size="13">
+<style>text{fill:#57606a}.v{fill:#24292f}@media (prefers-color-scheme: dark){text{fill:#8b949e}.v{fill:#e6edf3}}</style>
+<text x="0" y="18" class="v" font-size="15" font-weight="600">Users with their posts: median time, and statements sent</text>
+<rect x="150" y="26" width="12" height="12" fill="#0969da"/><text x="168" y="37">include_posts()</text><rect x="290" y="26" width="12" height="12" fill="#bf8700"/><text x="308" y="37">a query per user</text>
+<text x="0" y="74" class="v">10 users</text><text x="0" y="90">50 posts</text>
+<rect x="150" y="46" width="2.8" height="18" rx="2" fill="#0969da"/><text x="158.8" y="59" class="v">0.45 ms · 2 statements</text>
+<rect x="150" y="68" width="5.3" height="18" rx="2" fill="#bf8700"/><text x="161.3" y="81" class="v">0.84 ms · 11 statements</text>
+<text x="0" y="152" class="v">100 users</text><text x="0" y="168">500 posts</text>
+<rect x="150" y="124" width="2.4" height="18" rx="2" fill="#0969da"/><text x="158.4" y="137" class="v">0.38 ms · 2 statements</text>
+<rect x="150" y="146" width="22.8" height="18" rx="2" fill="#bf8700"/><text x="178.8" y="159" class="v">3.60 ms · 101 statements</text>
+<text x="0" y="230" class="v">1,000 users</text><text x="0" y="246">5,000 posts</text>
+<rect x="150" y="202" width="20.5" height="18" rx="2" fill="#0969da"/><text x="176.5" y="215" class="v">3.24 ms · 2 statements</text>
+<rect x="150" y="224" width="430.0" height="18" rx="2" fill="#bf8700"/><text x="586.0" y="237" class="v">67.95 ms · 1,001 statements</text>
+</svg>
