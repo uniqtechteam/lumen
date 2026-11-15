@@ -12,6 +12,11 @@ keywords.workspace = true
 categories.workspace = true
 
 [dependencies]
+lumen-schema.workspace = true
+sqlx.workspace = true
+
+[dev-dependencies]
+tokio.workspace = true
 
 [lints]
 workspace = true

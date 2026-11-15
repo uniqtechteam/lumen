@@ -1107,6 +1107,11 @@ version = "0.1.0-dev"
 [[package]]
 name = "lumen-migrate"
 version = "0.1.0-dev"
+dependencies = [
+ "lumen-schema",
+ "sqlx",
+ "tokio",
+]
 
 [[package]]
 name = "lumen-orm"

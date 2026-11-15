@@ -24,3 +24,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   columns, attributes in canonical order, block attributes after the fields, canonical spacing in
   values, comments kept exactly. It adds the missing side of a one-sided relation (with its foreign
   key field when needed), and formats around broken lines without disturbing the rest.
+- `lumen_migrate::Shape`, `calculate` and `postgres::describe`: the shape of a database (tables,
+  columns with `format_type()` types, normalised defaults, primary keys, indexes, foreign keys,
+  enums), calculated from a checked schema with Prisma's rules (types, constraint names, default
+  referential actions, `_AToB` join tables) or read from a live Postgres through `pg_catalog`.
