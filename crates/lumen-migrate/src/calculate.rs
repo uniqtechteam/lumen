@@ -299,3 +299,27 @@ pub fn calculate(schema: &Schema) -> Shape {
     shape.normalise();
     shape
 }
+
+/// The renames a schema asks for with `// lumen: renamed from old` comments.
+#[must_use]
+pub fn renames(schema: &Schema) -> crate::diff::Renames {
+    let mut out = crate::diff::Renames::default();
+    for model in &schema.models {
+        let table = model.database_name().to_owned();
+        if let Some(old) = &model.renamed_from {
+            out.tables
+                .push((schema_of(model), old.clone(), table.clone()));
+        }
+        for f in &model.fields {
+            if let Some(old) = &f.renamed_from {
+                out.columns.push((
+                    schema_of(model),
+                    table.clone(),
+                    old.clone(),
+                    f.database_name().to_owned(),
+                ));
+            }
+        }
+    }
+    out
+}

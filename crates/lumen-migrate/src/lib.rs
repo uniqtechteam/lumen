@@ -4,10 +4,13 @@
 //! [`postgres::describe`] reads one from a live database.
 
 mod calculate;
+pub mod check;
+pub mod diff;
 pub mod postgres;
 pub mod shape;
 
-pub use calculate::calculate;
+pub use calculate::{calculate, renames};
+pub use diff::{Renames, Step, diff};
 pub use shape::Shape;
 
 /// The version of this crate.
