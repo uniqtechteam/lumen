@@ -1,24 +1,13 @@
-error[E0277]: the trait bound `std::string::String: From<{integer}>` is not satisfied
- --> tests/ui/wrong_filter_type.rs:8:37
+error[E0308]: mismatched types
+ --> tests/ui/wrong_filter_type.rs:8:34
   |
-8 |     let _ = db::user::email::equals(5);
-  |             ----------------------- ^ the trait `From<{integer}>` is not implemented for `std::string::String`
+8 |     let _ = db::user::id::equals("1");
+  |             -------------------- ^^^ expected `i32`, found `&str`
   |             |
-  |             required by a bound introduced by this call
+  |             arguments to this function are incorrect
   |
-  = help: `std::string::String` implements trait `From<T>`:
-            From<&mut str>
-            From<&std::string::String>
-            From<&str>
-            From<Box<str>>
-            From<Cow<'_, str>>
-            From<PgCiText>
-            From<char>
-            From<lumen_orm::uuid::Uuid>
-            From<url::Url>
-  = note: required for `{integer}` to implement `Into<std::string::String>`
-note: required by a bound in `email::equals`
+note: function defined here
  --> tests/ui/../generated/blog.rs
   |
-  |         pub fn equals(v: impl Into<String>) -> ::lumen_orm::Filter {
-  |                               ^^^^^^^^^^^^ required by this bound in `equals`
+  |         pub fn equals(v: i32) -> ::lumen_orm::Filter {
+  |                ^^^^^^ ------
