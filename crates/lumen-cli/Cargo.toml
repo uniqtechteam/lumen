@@ -1,0 +1,27 @@
+[package]
+name = "lumen-cli"
+description = "The lumen command: init, format, validate, migrate, db push and generate."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[[bin]]
+name = "lumen"
+path = "src/main.rs"
+
+# the same program under a second name, for machines that also have the unrelated `lumen` tool
+[[bin]]
+name = "lumen-db"
+path = "src/main.rs"
+
+[dependencies]
+clap.workspace = true
+
+[lints]
+workspace = true

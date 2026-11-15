@@ -1,0 +1,47 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/lumen-orm",
+    "crates/lumen-schema",
+    "crates/lumen-migrate",
+    "crates/lumen-codegen",
+    "crates/lumen-cli",
+]
+
+[workspace.package]
+version = "0.1.0-dev"
+edition = "2024"
+rust-version = "1.88"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/uniqtechteam/lumen"
+homepage = "https://github.com/uniqtechteam/lumen"
+authors = ["UniqTech <https://uniqtech.dev>"]
+keywords = ["orm", "database", "prisma", "postgres", "mongodb"]
+categories = ["database"]
+
+[workspace.dependencies]
+lumen-orm = { path = "crates/lumen-orm", version = "0.1.0-dev" }
+lumen-schema = { path = "crates/lumen-schema", version = "0.1.0-dev" }
+lumen-migrate = { path = "crates/lumen-migrate", version = "0.1.0-dev" }
+lumen-codegen = { path = "crates/lumen-codegen", version = "0.1.0-dev" }
+clap = { version = "4.5", features = ["derive"] }
+mongodb = "3"
+sqlx = { version = "0.9", default-features = false, features = ["runtime-tokio", "postgres"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
+
+[workspace.lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+dbg_macro = "deny"
+todo = "deny"
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
