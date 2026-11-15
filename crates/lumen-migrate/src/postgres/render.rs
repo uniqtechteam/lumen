@@ -356,7 +356,7 @@ pub fn statements(step: &Step) -> Vec<String> {
                 .collect();
             if let Some(pk) = &t.primary_key {
                 lines.push(format!(
-                    "    CONSTRAINT {} PRIMARY KEY ({})",
+                    "\n    CONSTRAINT {} PRIMARY KEY ({})",
                     ident(&pk.name),
                     list(&pk.columns)
                 ));

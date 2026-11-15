@@ -34,3 +34,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   names follow them). Safe type changes run in place; casts that cannot work drop and add the column
   with a warning; removing enum values rebuilds the type. Destructive and impossible steps are found
   first, worded without a database for the file header or with real counts against one.
+- `lumen_migrate::commands`: `dev`, `deploy`, `status` and `reset`, compatible with Prisma Migrate.
+  Same folder layout (`YYYYMMDDHHMMSS_name/migration.sql`, `migration_lock.toml`), same
+  `_prisma_migrations` table and checksums (CRLF-tolerant), same advisory lock during deploy, so
+  lumen and Prisma can take turns on one project. `dev` replays the migrations on a shadow database
+  (cached by checksums), reports drift and edited or failed migrations, asks before data loss,
+  refuses steps that cannot run, and writes warnings into the migration file. `deploy` never needs
+  a shadow database and records failures.
+- Tested against the real Prisma CLI (6.19.3) in both directions.
