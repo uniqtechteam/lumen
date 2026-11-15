@@ -54,3 +54,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - Transactions: `db.transaction(async |tx| ..)` commits on `Ok` and rolls back on `Err`; nested
   `tx.transaction(..)` uses a savepoint; `transaction_with(Isolation::Serializable, ..)`. The `Run`
   trait lets the same code work on the pool and in a transaction. `db.statements()` counts statements.
+- `lumen_codegen::generate`: the type-safe client as one plain Rust file. Per model: the record
+  (serde, hand-written row decoding, no derive macros needed in your crate), typed filter functions
+  per field (`user::email::contains(..)`; a wrong value type does not compile), ordering,
+  `Create` (required fields are plain fields) and `Update` (`Set::To` / `Set::NotSet`) inputs,
+  `UniqueWhere` from the schema's unique keys, `find_many` / `find_unique` / `find_first`,
+  `create` / `create_many` / `update` / `update_many` / `upsert` / `delete` / `delete_many` /
+  `count`, and `include_<relation>()` for one-to-one and one-to-many (one more query for all
+  records; a required to-one is not an `Option`). Enums become Rust enums. `@updatedAt` and
+  `uuid()` are filled by the client. Errors name fields through the schema's constraint names.
+  Everything runs on the pool or inside a transaction. The output is byte-for-byte stable.

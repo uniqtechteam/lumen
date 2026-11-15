@@ -206,6 +206,23 @@ pub trait Run {
     }
 }
 
+impl<T: Run> Run for &mut T {
+    async fn fetch_all<U>(&mut self, built: Built) -> Result<Vec<U>>
+    where
+        U: for<'r> FromRow<'r, PgRow> + Send + Unpin,
+    {
+        (**self).fetch_all(built).await
+    }
+
+    async fn execute(&mut self, built: Built) -> Result<u64> {
+        (**self).execute(built).await
+    }
+
+    async fn count(&mut self, select: &Select) -> Result<i64> {
+        (**self).count(select).await
+    }
+}
+
 impl Run for &Db {
     async fn fetch_all<T>(&mut self, built: Built) -> Result<Vec<T>>
     where

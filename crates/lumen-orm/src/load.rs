@@ -43,7 +43,7 @@ pub async fn load_many<R, P, C, K>(
     parent_key: impl Fn(&P) -> Option<K>,
     child: &Select,
     child_column: &str,
-    child_key: impl Fn(&C) -> K,
+    child_key: impl Fn(&C) -> Option<K>,
     take: Option<i64>,
 ) -> Result<Vec<Vec<C>>>
 where
@@ -63,7 +63,9 @@ where
         );
         q.per_key_limit = take.map(|n| (child_column.to_owned(), n));
         for c in run.fetch_all::<C>(q.build()).await? {
-            grouped.entry(child_key(&c)).or_default().push(c);
+            if let Some(k) = child_key(&c) {
+                grouped.entry(k).or_default().push(c);
+            }
         }
     }
     Ok(parents
@@ -87,7 +89,7 @@ pub async fn load_one<R, P, C, K>(
     parent_key: impl Fn(&P) -> Option<K>,
     child: &Select,
     child_column: &str,
-    child_key: impl Fn(&C) -> K,
+    child_key: impl Fn(&C) -> Option<K>,
 ) -> Result<Vec<Option<C>>>
 where
     R: Run,
@@ -105,7 +107,9 @@ where
             ),
         );
         for c in run.fetch_all::<C>(q.build()).await? {
-            found.entry(child_key(&c)).or_insert(c);
+            if let Some(k) = child_key(&c) {
+                found.entry(k).or_insert(c);
+            }
         }
     }
     Ok(parents
