@@ -66,6 +66,27 @@ impl Error {
         self.code == "P2002"
     }
 
+    /// Whether no record matched (P2025).
+    #[must_use]
+    pub fn is_not_found(&self) -> bool {
+        self.code == "P2025"
+    }
+
+    /// The HTTP status a web API should answer with: 404 when nothing matched, 409 for a
+    /// duplicate, a record still in use or a transaction conflict, 400 for a value the database
+    /// refused, 503 when the database is unreachable, and 500 for everything else. Frameworks map
+    /// an `Error` with this, `code` and `message`.
+    #[must_use]
+    pub fn http_status(&self) -> u16 {
+        match self.code {
+            "P2025" => 404,
+            "P2002" | "P2003" | "P2034" => 409,
+            "P2000" | "P2011" | "P2023" => 400,
+            "P1001" => 503,
+            _ => 500,
+        }
+    }
+
     /// Turn a driver error into a coded one. `constraints` maps constraint names to fields.
     #[must_use]
     pub fn from_sqlx(e: sqlx::Error, constraints: &HashMap<String, Vec<String>>) -> Self {
@@ -144,5 +165,17 @@ mod tests {
     #[test]
     fn an_error_is_one_pointer_wide() {
         assert_eq!(size_of::<Error>(), size_of::<usize>());
+    }
+
+    #[test]
+    fn codes_map_to_http_statuses() {
+        let status = |code| Error::new(code, "x").http_status();
+        assert_eq!(status("P2025"), 404);
+        assert_eq!(status("P2002"), 409);
+        assert_eq!(status("P2003"), 409);
+        assert_eq!(status("P2011"), 400);
+        assert_eq!(status("P1001"), 503);
+        assert_eq!(status("P2010"), 500);
+        assert!(Error::not_found("user").is_not_found());
     }
 }

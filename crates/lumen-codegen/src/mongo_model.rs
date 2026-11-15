@@ -113,8 +113,20 @@ fn filled(schema: &Schema, f: &Field) -> Option<TokenStream> {
     match &f.default {
         Some(DefaultValue::Now) => Some(quote!(::lumen_orm::mongo::DateTime::now())),
         Some(DefaultValue::Literal(l)) => literal(schema, f, l),
+        // ids made by the client, as Prisma does on MongoDB; v7 sorts by creation time
+        Some(DefaultValue::Uuid(7)) if is_string(f) => {
+            Some(quote!(::lumen_orm::uuid::Uuid::now_v7().to_string()))
+        }
+        Some(DefaultValue::Uuid(_)) if is_string(f) => {
+            Some(quote!(::lumen_orm::uuid::Uuid::new_v4().to_string()))
+        }
         _ => None,
     }
+}
+
+fn is_string(f: &Field) -> bool {
+    f.kind == FieldKind::Scalar(ScalarType::String)
+        && f.native_type.as_ref().is_none_or(|n| n.name != "ObjectId")
 }
 
 fn create_input(schema: &Schema, model: &Model) -> TokenStream {

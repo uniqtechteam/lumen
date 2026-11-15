@@ -1248,6 +1248,7 @@ dependencies = [
  "lumen-migrate",
  "lumen-orm",
  "lumen-schema",
+ "mongodb",
  "prettyplease",
  "proc-macro2",
  "quote",
