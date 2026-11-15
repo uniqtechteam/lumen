@@ -40,6 +40,8 @@ pub enum Op {
     EndsWith(String, Mode),
     /// `IS NULL` (`true`) or `IS NOT NULL` (`false`).
     IsNull(bool),
+    /// `= ANY($1)` with one array parameter: loading by many keys without a parameter limit.
+    Any(Vec<Value>),
 }
 
 /// A condition tree.
@@ -53,6 +55,8 @@ pub enum Filter {
     Not(Box<Filter>),
     /// A column condition.
     Column(String, Op),
+    /// `("a", "b") IN (($1, $2), ..)`: loading by composite keys.
+    Tuples(Vec<String>, Vec<Vec<Value>>),
 }
 
 impl Filter {

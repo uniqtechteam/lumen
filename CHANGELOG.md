@@ -48,3 +48,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   NULL is written as a literal. Prisma's operators, including case-insensitive matching and `not`
   keeping NULL rows. Errors carry Prisma's codes (P2002, P2003, P2011, P2025, ...) and name the
   fields behind a constraint.
+- Relations without N+1: `load::load_many`, `load_one` and `load_many_composite` load related rows
+  for any number of parents in one statement per level (`= ANY($1)` with one array parameter;
+  composite keys in chunks under the parameter limit), with `take` per parent done in SQL.
+- Transactions: `db.transaction(async |tx| ..)` commits on `Ok` and rolls back on `Err`; nested
+  `tx.transaction(..)` uses a savepoint; `transaction_with(Isolation::Serializable, ..)`. The `Run`
+  trait lets the same code work on the pool and in a transaction. `db.statements()` counts statements.
