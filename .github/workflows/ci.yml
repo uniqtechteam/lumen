@@ -38,7 +38,7 @@ jobs:
       - run: cargo test --workspace
 
   databases:
-    name: test with Postgres 16 and MongoDB 7
+    name: test with Postgres 16, MongoDB 7 and the Prisma CLI
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -57,8 +57,13 @@ jobs:
     env:
       LUMEN_TEST_POSTGRES_URL: postgres://postgres:lumen@localhost:5432/lumen
       LUMEN_TEST_MONGO_URL: mongodb://localhost:27017
+      # migrations are also checked against the real Prisma CLI (tests/prisma_interop.rs)
+      LUMEN_TEST_PRISMA: "1"
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: cargo test --workspace -- --nocapture

@@ -7,7 +7,9 @@
 //! database compare equal.
 
 /// What happens to rows that point at a changed or removed row.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(
+    serde::Serialize, serde::Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord,
+)]
 pub enum Action {
     /// `CASCADE`
     Cascade,
@@ -36,7 +38,7 @@ impl Action {
 }
 
 /// A column default, normalised.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Default {
     /// A sequence (`SERIAL` / `nextval(..)` / identity): `autoincrement()`.
     Sequence,
@@ -49,7 +51,7 @@ pub enum Default {
 }
 
 /// One column.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct Column {
     /// The name.
     pub name: String,
@@ -62,7 +64,9 @@ pub struct Column {
 }
 
 /// Sort order of an index column.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(
+    serde::Serialize, serde::Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord,
+)]
 pub enum Sort {
     /// Ascending (the default).
     Asc,
@@ -71,7 +75,7 @@ pub enum Sort {
 }
 
 /// One column of an index.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct IndexColumn {
     /// The column name.
     pub name: String,
@@ -80,7 +84,7 @@ pub struct IndexColumn {
 }
 
 /// An index or unique index.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Index {
     /// The name.
     pub name: String,
@@ -93,7 +97,7 @@ pub struct Index {
 }
 
 /// A primary key.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct PrimaryKey {
     /// The constraint name.
     pub name: String,
@@ -102,7 +106,7 @@ pub struct PrimaryKey {
 }
 
 /// A foreign key.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ForeignKey {
     /// The constraint name.
     pub name: String,
@@ -121,7 +125,7 @@ pub struct ForeignKey {
 }
 
 /// A table.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct Table {
     /// The schema (namespace), `public` by default.
     pub schema: String,
@@ -146,7 +150,7 @@ impl Table {
 }
 
 /// An enum type.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct EnumType {
     /// The schema.
     pub schema: String,
@@ -157,7 +161,7 @@ pub struct EnumType {
 }
 
 /// A whole database.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone, Default, PartialEq, Eq)]
 pub struct Shape {
     /// Tables, by schema and name.
     pub tables: Vec<Table>,

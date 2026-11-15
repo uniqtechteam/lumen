@@ -55,6 +55,14 @@ fn name(t: &TableRef) -> String {
 
 fn plan(steps: &[Step]) -> Vec<Check> {
     let mut out = Vec::new();
+    // tables made by this migration are empty, so nothing about their data can go wrong
+    let created: Vec<&TableRef> = steps
+        .iter()
+        .filter_map(|s| match s {
+            Step::CreateTable(t) => Some(&t.table),
+            _ => None,
+        })
+        .collect();
     for step in steps {
         match step {
             Step::DropTable(t) => out.push(Check {
@@ -79,7 +87,7 @@ fn plan(steps: &[Step]) -> Vec<Check> {
                     to.name
                 ),
             }),
-            Step::CreateIndex(t, i) if i.unique => out.push(Check {
+            Step::CreateIndex(t, i) if i.unique && !created.contains(&t) => out.push(Check {
                 severity: Severity::Warning,
                 count: Count::Rows(t.clone()),
                 with_count: format!(
