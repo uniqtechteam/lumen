@@ -31,10 +31,12 @@ pub use db::{Db, Isolation, Run, Tx};
 pub use error::{Error, ErrorInfo, Result};
 pub use filter::{Col, Filter, Mode, Op, col};
 pub use query::{Built, Delete, Insert, OnConflict, Order, Select, Table, Update, ident};
-pub use value::Value;
+pub use value::{Set, Value};
 
 /// sqlx, re-exported so generated code and apps use the same version.
 pub use sqlx;
+/// The crates the generated client's types come from, re-exported so a project only needs lumen.
+pub use {chrono, rust_decimal, serde, serde_json, uuid};
 
 /// The version of this crate.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

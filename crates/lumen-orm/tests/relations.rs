@@ -134,7 +134,7 @@ async fn ac_001_a_two_level_include_over_100_parents_runs_3_statements() {
         |u| Some(u.id),
         &select("Post"),
         "authorId",
-        |p: &Post| p.author_id,
+        |p: &Post| Some(p.author_id),
         None,
     )
     .await
@@ -146,7 +146,7 @@ async fn ac_001_a_two_level_include_over_100_parents_runs_3_statements() {
         |p| Some(p.id),
         &select("Comment"),
         "postId",
-        |c: &Comment| c.post_id,
+        |c: &Comment| Some(c.post_id),
         None,
     )
     .await
@@ -181,7 +181,7 @@ async fn to_one_relations_both_ways() {
         |u| Some(u.id),
         &select("Profile"),
         "userId",
-        |p: &Profile| p.user_id,
+        |p: &Profile| Some(p.user_id),
     )
     .await
     .unwrap();
@@ -196,7 +196,7 @@ async fn to_one_relations_both_ways() {
         |p| Some(p.author_id),
         &select("User"),
         "id",
-        |u: &User| u.id,
+        |u: &User| Some(u.id),
     )
     .await
     .unwrap();
@@ -227,7 +227,7 @@ async fn take_per_parent_and_child_filters_run_in_sql() {
         |u| Some(u.id),
         &newest,
         "authorId",
-        |p: &Post| p.author_id,
+        |p: &Post| Some(p.author_id),
         Some(2),
     )
     .await
@@ -250,7 +250,7 @@ async fn take_per_parent_and_child_filters_run_in_sql() {
         |u| Some(u.id),
         &only_first,
         "authorId",
-        |p: &Post| p.author_id,
+        |p: &Post| Some(p.author_id),
         None,
     )
     .await
@@ -267,7 +267,7 @@ async fn take_per_parent_and_child_filters_run_in_sql() {
         |u| Some(u.id),
         &select("Post"),
         "authorId",
-        |p| p.author_id,
+        |p| Some(p.author_id),
         None,
     )
     .await

@@ -73,6 +73,48 @@ from! {
     NaiveDateTime => Timestamp,
 }
 
+impl From<uuid::Uuid> for Value {
+    fn from(v: uuid::Uuid) -> Self {
+        Self::Uuid(v.to_string())
+    }
+}
+
+impl From<rust_decimal::Decimal> for Value {
+    fn from(v: rust_decimal::Decimal) -> Self {
+        Self::Decimal(v.to_string())
+    }
+}
+
+impl<T: Into<Value>> From<Vec<T>> for Value {
+    fn from(v: Vec<T>) -> Self {
+        Self::List(v.into_iter().map(Into::into).collect())
+    }
+}
+
+/// A field in an update: left as it is, or set to a new value.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub enum Set<T> {
+    /// Leave the column as it is.
+    #[default]
+    NotSet,
+    /// Set the column.
+    To(T),
+}
+
+impl<T> Set<T> {
+    /// Whether a value is given.
+    #[must_use]
+    pub fn is_set(&self) -> bool {
+        matches!(self, Self::To(_))
+    }
+}
+
+impl<T> From<T> for Set<T> {
+    fn from(v: T) -> Self {
+        Self::To(v)
+    }
+}
+
 impl<T: Into<Value>> From<Option<T>> for Value {
     fn from(v: Option<T>) -> Self {
         v.map_or(Self::Null, Into::into)

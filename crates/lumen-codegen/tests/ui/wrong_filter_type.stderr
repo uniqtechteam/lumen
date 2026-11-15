@@ -1,0 +1,13 @@
+error[E0308]: mismatched types
+ --> tests/ui/wrong_filter_type.rs:8:34
+  |
+8 |     let _ = db::user::id::equals("1");
+  |             -------------------- ^^^ expected `i32`, found `&str`
+  |             |
+  |             arguments to this function are incorrect
+  |
+note: function defined here
+ --> tests/ui/../generated/blog.rs
+  |
+  |         pub fn equals(v: i32) -> ::lumen_orm::Filter {
+  |                ^^^^^^ ------

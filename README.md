@@ -33,9 +33,10 @@ let users = db
     .user()
     .find_many()
     .filter(user::email::ends_with("@example.com"))
-    .include(user::posts())
+    .order_by(user::id::desc())
+    .include_posts()
     .exec()
-    .await?;
+    .await?;   // Vec<user::WithPosts>: each user with its posts, in two queries
 ```
 
 It reads the same `schema.prisma` files Prisma reads and keeps migrations in the same layout, so a
