@@ -1,0 +1,62 @@
+// A blog on Postgres: one-to-many, one-to-one, many-to-many, enums, native types.
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "lumen"
+  output   = "../src/db.rs" // generated, do not edit
+}
+
+/// Someone who can sign in.
+model User {
+  id        Int       @id @default(autoincrement())
+  email     String    @unique @db.VarChar(320)
+  name      String?
+  role      Role      @default(READER)
+  posts     Post[]
+  profile   Profile?
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
+  @@map("users")
+}
+
+/**
+ * Extra details, one per user.
+ */
+model Profile {
+  id     Int    @id @default(autoincrement())
+  bio    String @db.Text
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId Int    @unique
+}
+
+model Post {
+  id        Int      @id @default(autoincrement())
+  title     String
+  body      String?
+  published Boolean  @default(false)
+  author    User     @relation(fields: [authorId], references: [id])
+  authorId  Int
+  tags      Tag[]
+  views     BigInt   @default(0)
+
+  @@index([authorId, published(sort: Desc)])
+  @@unique([authorId, title], name: "one_title_per_author")
+}
+
+model Tag {
+  name  String @id
+  posts Post[]
+}
+
+enum Role {
+  READER
+  WRITER @map("writer")
+  ADMIN
+
+  @@map("user_role")
+}
