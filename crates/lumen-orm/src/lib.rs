@@ -24,6 +24,8 @@ mod db;
 mod error;
 mod filter;
 pub mod load;
+#[cfg(feature = "mongodb")]
+pub mod mongo;
 mod query;
 mod value;
 

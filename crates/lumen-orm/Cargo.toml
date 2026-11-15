@@ -10,7 +10,12 @@ authors.workspace = true
 keywords.workspace = true
 categories.workspace = true
 
+[features]
+## MongoDB support (`lumen_orm::mongo`).
+mongodb = ["dep:mongodb"]
+
 [dependencies]
+mongodb = { workspace = true, optional = true }
 chrono.workspace = true
 rust_decimal.workspace = true
 serde.workspace = true
@@ -19,6 +24,7 @@ sqlx.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]
+lumen-orm = { path = ".", features = ["mongodb"] }
 mongodb.workspace = true
 tokio.workspace = true
 

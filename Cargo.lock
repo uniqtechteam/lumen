@@ -1242,6 +1242,7 @@ name = "lumen-migrate"
 version = "0.1.0-dev"
 dependencies = [
  "lumen-schema",
+ "mongodb",
  "serde",
  "serde_json",
  "sha2 0.10.9",
@@ -1254,6 +1255,7 @@ name = "lumen-orm"
 version = "0.1.0-dev"
 dependencies = [
  "chrono",
+ "lumen-orm",
  "mongodb",
  "rust_decimal",
  "serde",

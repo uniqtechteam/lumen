@@ -32,6 +32,8 @@ pub enum Value {
     Decimal(String),
     /// An enum value and the type's SQL name (cast with `::"Role"`).
     Enum(String, String),
+    /// A MongoDB ObjectId, as 24 hex characters.
+    ObjectId(String),
     /// A list of values of one type, for `text[]` columns and `= ANY(..)`.
     List(Vec<Value>),
 }

@@ -95,9 +95,11 @@ fn arguments(params: &[Value]) -> Result<PgArguments> {
             Value::Int(x) => args.add(*x),
             Value::BigInt(x) => args.add(*x),
             Value::Float(x) => args.add(*x),
-            Value::Text(s) | Value::Uuid(s) | Value::Decimal(s) | Value::Enum(s, _) => {
-                args.add(s.clone())
-            }
+            Value::Text(s)
+            | Value::Uuid(s)
+            | Value::Decimal(s)
+            | Value::Enum(s, _)
+            | Value::ObjectId(s) => args.add(s.clone()),
             Value::Bytes(b) => args.add(b.clone()),
             Value::Json(j) => args.add(sqlx::types::Json(j.clone())),
             Value::DateTime(t) => args.add(*t),
