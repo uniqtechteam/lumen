@@ -70,3 +70,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   the same results as on Postgres. Unique-index errors are P2002.
 - `lumen_migrate::mongo::push`: `db push` for MongoDB, managing collections and Prisma-named
   indexes (created, rebuilt when changed, dropped when removed; collections are never dropped).
+- MongoDB relations: `mongo::load_many` and `load_one` load related documents for any number of
+  parents in one `$in` query per level; `take` per parent runs on the server with
+  `$setWindowFields`. `MongoDb::transaction(async |tx| ..)` (replica sets) commits on `Ok` and
+  aborts on `Err`; the `MongoRun` trait works on the database and inside a transaction.
+- `lumen_migrate::mongo_pull::pull`: `db pull` for MongoDB samples up to 1000 documents per
+  collection and suggests a formatted schema: ObjectId ids, optional fields, composite types for
+  nested documents, lists, `@map` for names that are not identifiers, indexes, and a comment where
+  a field holds several types.

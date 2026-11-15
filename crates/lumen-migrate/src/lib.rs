@@ -9,6 +9,7 @@ pub mod commands;
 pub mod diff;
 pub mod history;
 pub mod mongo;
+pub mod mongo_pull;
 pub mod postgres;
 pub mod shape;
 
