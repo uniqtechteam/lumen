@@ -42,3 +42,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   refuses steps that cannot run, and writes warnings into the migration file. `deploy` never needs
   a shadow database and records failures.
 - Tested against the real Prisma CLI (6.19.3) in both directions.
+- `lumen-orm`: a query builder for Postgres (select with filters, ordering, paging, `DISTINCT ON`
+  and counts; insert of many rows with `RETURNING`; upsert with `ON CONFLICT`; update; delete; raw
+  queries). Values are always parameters, cast where Postgres needs it (`uuid`, `numeric`, enums);
+  NULL is written as a literal. Prisma's operators, including case-insensitive matching and `not`
+  keeping NULL rows. Errors carry Prisma's codes (P2002, P2003, P2011, P2025, ...) and name the
+  fields behind a constraint.

@@ -11,10 +11,12 @@ keywords.workspace = true
 categories.workspace = true
 
 [dependencies]
+chrono.workspace = true
+serde_json.workspace = true
+sqlx.workspace = true
 
 [dev-dependencies]
 mongodb.workspace = true
-sqlx.workspace = true
 tokio.workspace = true
 
 [lints]
