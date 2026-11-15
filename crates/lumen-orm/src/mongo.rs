@@ -15,6 +15,47 @@ use crate::filter::{Filter, Mode, Op};
 use crate::query::Order;
 use crate::value::Value;
 
+/// The BSON types the generated MongoDB client uses.
+pub use mongodb::bson::{Binary, DateTime, Decimal128, oid::ObjectId};
+
+impl From<ObjectId> for Value {
+    fn from(v: ObjectId) -> Self {
+        Self::ObjectId(v.to_hex())
+    }
+}
+
+impl From<DateTime> for Value {
+    fn from(v: DateTime) -> Self {
+        chrono::DateTime::from_timestamp_millis(v.timestamp_millis())
+            .map_or(Self::Null, Self::DateTime)
+    }
+}
+
+impl From<Binary> for Value {
+    fn from(v: Binary) -> Self {
+        Self::Bytes(v.bytes)
+    }
+}
+
+/// An inserted id (or any simple BSON value) as a [`Value`], to look the document up again.
+#[must_use]
+pub fn value_of_bson(b: &Bson) -> Value {
+    match b {
+        Bson::ObjectId(id) => Value::ObjectId(id.to_hex()),
+        Bson::String(s) => Value::Text(s.clone()),
+        Bson::Int32(i) => Value::Int(*i),
+        Bson::Int64(i) => Value::BigInt(*i),
+        Bson::Boolean(v) => Value::Bool(*v),
+        _ => Value::Null,
+    }
+}
+
+impl From<Decimal128> for Value {
+    fn from(v: Decimal128) -> Self {
+        Self::Decimal(v.to_string())
+    }
+}
+
 /// A `Value` as BSON. Text in an `ObjectId` field is sent as an ObjectId.
 ///
 /// # Errors

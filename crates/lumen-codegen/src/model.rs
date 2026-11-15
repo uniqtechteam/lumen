@@ -10,7 +10,7 @@ use quote::{format_ident, quote};
 
 use crate::types::{base_type, base_type_at, field_type, hashable, ident, pascal, snake};
 
-fn doc(text: Option<&str>) -> TokenStream {
+pub(crate) fn doc(text: Option<&str>) -> TokenStream {
     match text {
         Some(t) => {
             let lines = t.lines().map(|l| format!(" {l}"));
@@ -21,7 +21,7 @@ fn doc(text: Option<&str>) -> TokenStream {
 }
 
 /// The fields stored as columns, with their Rust types.
-fn columns<'a>(schema: &'a Schema, model: &'a Model) -> Vec<(&'a Field, TokenStream)> {
+pub(crate) fn columns<'a>(schema: &'a Schema, model: &'a Model) -> Vec<(&'a Field, TokenStream)> {
     model
         .fields
         .iter()
@@ -62,7 +62,9 @@ fn record(schema: &Schema, model: &Model) -> TokenStream {
 
 fn is_text(f: &Field) -> bool {
     f.kind == FieldKind::Scalar(ScalarType::String)
-        && f.native_type.as_ref().is_none_or(|n| n.name != "Uuid")
+        && f.native_type
+            .as_ref()
+            .is_none_or(|n| n.name != "Uuid" && n.name != "ObjectId")
 }
 
 fn is_ordered(f: &Field) -> bool {
@@ -80,7 +82,7 @@ fn is_ordered(f: &Field) -> bool {
 }
 
 /// `user::email::equals(..)` and friends, typed by the field.
-fn field_module(schema: &Schema, f: &Field) -> TokenStream {
+pub(crate) fn field_module(schema: &Schema, f: &Field) -> TokenStream {
     let module = ident(&snake(&f.name));
     let column = f.database_name();
     let Some(base) = base_type_at(schema, f, 2) else {
@@ -164,7 +166,17 @@ fn field_module(schema: &Schema, f: &Field) -> TokenStream {
 }
 
 /// How a create fills a field the caller left out.
-fn client_default(f: &Field) -> Option<TokenStream> {
+pub(crate) fn client_default(f: &Field) -> Option<TokenStream> {
+    client_default_for(f, false)
+}
+
+/// Like [`client_default`]; `mongo` uses BSON dates.
+pub(crate) fn client_default_for(f: &Field, mongo: bool) -> Option<TokenStream> {
+    if mongo && f.updated_at {
+        return Some(quote!(::lumen_orm::Value::from(
+            ::lumen_orm::mongo::DateTime::now()
+        )));
+    }
     match (&f.default, f.updated_at) {
         (_, true) => Some(
             if f.native_type
@@ -193,7 +205,7 @@ fn uuid_value(f: &Field, make: &TokenStream) -> TokenStream {
 }
 
 /// Whether the database or the client fills the field when it is left out.
-fn has_default(f: &Field) -> bool {
+pub(crate) fn has_default(f: &Field) -> bool {
     f.updated_at
         || matches!(
             f.default,
@@ -207,7 +219,7 @@ fn has_default(f: &Field) -> bool {
         )
 }
 
-fn create_input(schema: &Schema, model: &Model) -> TokenStream {
+pub(crate) fn create_input(schema: &Schema, model: &Model) -> TokenStream {
     let cols = columns(schema, model);
     let fields = cols.iter().map(|(f, ty)| {
         let id = ident(&snake(&f.name));
@@ -251,7 +263,7 @@ fn create_input(schema: &Schema, model: &Model) -> TokenStream {
     }
 }
 
-fn update_input(schema: &Schema, model: &Model) -> TokenStream {
+pub(crate) fn update_input(schema: &Schema, model: &Model) -> TokenStream {
     let cols = columns(schema, model);
     let fields = cols.iter().map(|(f, ty)| {
         let id = ident(&snake(&f.name));
@@ -260,7 +272,8 @@ fn update_input(schema: &Schema, model: &Model) -> TokenStream {
     let pushes = cols.iter().map(|(f, _)| {
         let id = ident(&snake(&f.name));
         let column = f.database_name();
-        let auto = if f.updated_at { client_default(f) } else { None };
+        let mongo = schema.provider() == lumen_schema::checked::Provider::MongoDb;
+        let auto = if f.updated_at { client_default_for(f, mongo) } else { None };
         if let Some(now) = auto {
             quote! {
                 set.push((#column.to_owned(), match self.#id { ::lumen_orm::Set::To(v) => ::lumen_orm::Value::from(v), ::lumen_orm::Set::NotSet => #now }));
@@ -287,7 +300,7 @@ fn update_input(schema: &Schema, model: &Model) -> TokenStream {
 }
 
 /// `UniqueWhere::Id(1)`, `UniqueWhere::AuthorIdTitle { .. }`: one variant per unique key.
-fn unique_where(schema: &Schema, model: &Model) -> TokenStream {
+pub(crate) fn unique_where(schema: &Schema, model: &Model) -> TokenStream {
     let mut variants = Vec::new();
     let mut arms = Vec::new();
     let mut columns_arms = Vec::new();
@@ -360,17 +373,17 @@ fn unique_where(schema: &Schema, model: &Model) -> TokenStream {
 }
 
 /// An include of a one-to-one or one-to-many relation on a single-column key.
-struct Include {
-    field: String,
-    target: ModelId,
-    many: bool,
-    required: bool,
-    parent_key: (String, bool),
-    child_column: String,
-    child_key: (String, bool),
+pub(crate) struct Include {
+    pub(crate) field: String,
+    pub(crate) target: ModelId,
+    pub(crate) many: bool,
+    pub(crate) required: bool,
+    pub(crate) parent_key: (String, bool),
+    pub(crate) child_column: String,
+    pub(crate) child_key: (String, bool),
 }
 
-fn includes(schema: &Schema, model_id: ModelId) -> Vec<Include> {
+pub(crate) fn includes(schema: &Schema, model_id: ModelId) -> Vec<Include> {
     let model = &schema.models[model_id.0];
     let mut out = Vec::new();
     for f in &model.fields {

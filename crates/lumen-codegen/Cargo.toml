@@ -19,7 +19,7 @@ quote.workspace = true
 syn.workspace = true
 
 [dev-dependencies]
-lumen-orm.workspace = true
+lumen-orm = { workspace = true, features = ["mongodb"] }
 tokio.workspace = true
 trybuild = "1"
 

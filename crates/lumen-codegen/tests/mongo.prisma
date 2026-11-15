@@ -1,0 +1,34 @@
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+model Account {
+  id        String    @id @default(auto()) @map("_id") @db.ObjectId
+  email     String    @unique
+  address   Address?
+  phones    Phone[]
+  sessions  Session[]
+  createdAt DateTime  @default(now())
+}
+
+model Session {
+  id        String  @id @default(auto()) @map("_id") @db.ObjectId
+  account   Account @relation(fields: [accountId], references: [id])
+  accountId String  @db.ObjectId
+  token     String  @unique
+
+  @@index([accountId])
+}
+
+/// Embedded in an account document.
+type Address {
+  street String
+  city   String
+  zip    String?
+}
+
+type Phone {
+  number String
+  kind   String @default("mobile")
+}
