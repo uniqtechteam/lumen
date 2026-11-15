@@ -4,6 +4,6 @@
 mod db;
 
 fn main() {
-    // `email` is text: a number does not fit
-    let _ = db::user::email::equals(5);
+    // `id` is a number: text does not fit
+    let _ = db::user::id::equals("1");
 }
