@@ -78,3 +78,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   collection and suggests a formatted schema: ObjectId ids, optional fields, composite types for
   nested documents, lists, `@map` for names that are not identifiers, indexes, and a comment where
   a field holds several types.
+- `lumen generate` for MongoDB: the same client API as on Postgres (`find_many().filter(..)`,
+  `include_<relation>()`, `create`, `update`, `upsert`, `delete`, `count`, ...) with records that
+  are serde documents, `ObjectId`, BSON dates and decimals, structs for composite types, defaults
+  filled by the client (`now()`, literals, `@updatedAt`; the driver makes `_id`), relations through
+  `$in` per level and everything runnable inside a transaction.

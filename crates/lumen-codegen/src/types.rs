@@ -1,7 +1,7 @@
 //! Rust names and types for schema items.
 
 use lumen_schema::ast::Arity;
-use lumen_schema::checked::{Field, FieldKind, ScalarType, Schema};
+use lumen_schema::checked::{Field, FieldKind, Provider, ScalarType, Schema};
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::quote;
 
@@ -68,6 +68,9 @@ pub fn base_type(schema: &Schema, field: &Field) -> Option<TokenStream> {
 /// Like [`base_type`], from `depth` modules below the file's top (enums live at the top).
 pub fn base_type_at(schema: &Schema, field: &Field, depth: usize) -> Option<TokenStream> {
     let native = field.native_type.as_ref().map(|n| n.name.as_str());
+    if schema.provider() == Provider::MongoDb {
+        return mongo_type(schema, field, depth);
+    }
     Some(match &field.kind {
         FieldKind::Scalar(s) => match (s, native) {
             (ScalarType::String, Some("Uuid")) => quote!(::lumen_orm::uuid::Uuid),
@@ -95,6 +98,35 @@ pub fn base_type_at(schema: &Schema, field: &Field, depth: usize) -> Option<Toke
         | FieldKind::Unknown => {
             return None;
         }
+    })
+}
+
+/// MongoDB types: ObjectIds, BSON dates and decimals, and structs for composite types.
+fn mongo_type(schema: &Schema, field: &Field, depth: usize) -> Option<TokenStream> {
+    let native = field.native_type.as_ref().map(|n| n.name.as_str());
+    let up: Vec<TokenStream> = std::iter::repeat_n(quote!(super::), depth).collect();
+    Some(match &field.kind {
+        FieldKind::Scalar(ScalarType::String) if native == Some("ObjectId") => {
+            quote!(::lumen_orm::mongo::ObjectId)
+        }
+        FieldKind::Scalar(ScalarType::String) => quote!(String),
+        FieldKind::Scalar(ScalarType::Int) => quote!(i32),
+        FieldKind::Scalar(ScalarType::BigInt) => quote!(i64),
+        FieldKind::Scalar(ScalarType::Float) => quote!(f64),
+        FieldKind::Scalar(ScalarType::Decimal) => quote!(::lumen_orm::mongo::Decimal128),
+        FieldKind::Scalar(ScalarType::Boolean) => quote!(bool),
+        FieldKind::Scalar(ScalarType::DateTime) => quote!(::lumen_orm::mongo::DateTime),
+        FieldKind::Scalar(ScalarType::Json) => quote!(::lumen_orm::serde_json::Value),
+        FieldKind::Scalar(ScalarType::Bytes) => quote!(::lumen_orm::mongo::Binary),
+        FieldKind::Enum(id) => {
+            let name = ident(&schema.enums[id.0].name);
+            quote!(#(#up)* #name)
+        }
+        FieldKind::Composite(id) => {
+            let name = ident(&schema.composite_types[id.0].name);
+            quote!(#(#up)* #name)
+        }
+        FieldKind::Model(_) | FieldKind::Unsupported(_) | FieldKind::Unknown => return None,
     })
 }
 
