@@ -18,6 +18,9 @@ use sqlx::{AssertSqlSafe, PgPool};
 
 const PRISMA: &str = "prisma@6.19.3";
 
+/// npx installs into one shared cache, so two tests running it at once collide; they take turns.
+static NPX: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
 const V1: &str = "datasource db {\n  provider = \"postgresql\"\n  url      = env(\"DATABASE_URL\")\n}\n\nmodel User {\n  id    Int     @id @default(autoincrement())\n  email String  @unique\n  name  String?\n  posts Post[]\n}\n\nmodel Post {\n  id       Int    @id @default(autoincrement())\n  title    String\n  author   User   @relation(fields: [authorId], references: [id])\n  authorId Int\n}\n";
 
 fn v2() -> String {
@@ -114,6 +117,7 @@ fn folders(dir: &Path) -> Vec<String> {
 
 #[tokio::test]
 async fn ac_002_a_prisma_project_continues_with_lumen() {
+    let _turn = NPX.lock().await;
     let Some(env) = Env::new("p2l").await else {
         return;
     };
@@ -181,6 +185,7 @@ async fn ac_002_a_prisma_project_continues_with_lumen() {
 
 #[tokio::test]
 async fn ac_002_a_lumen_project_continues_with_prisma() {
+    let _turn = NPX.lock().await;
     let Some(env) = Env::new("l2p").await else {
         return;
     };
