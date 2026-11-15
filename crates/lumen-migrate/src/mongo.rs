@@ -1,6 +1,9 @@
 //! MongoDB: `db push` instead of migration files, as in Prisma. Only collections and indexes are
-//! managed. Collections are created and never dropped; indexes are created, dropped when the
-//! schema no longer has them, and dropped and created again when their definition changes.
+//! managed. Collections are created and never dropped. Indexes the schema has are created, and
+//! dropped and created again when their definition in the schema changes (the schema names them,
+//! so they are lumen's). An index the schema does not have is never dropped: it may be one a
+//! person made by hand, and MongoDB keeps nothing that tells lumen's apart from it, so `db push`
+//! reports it ([`MongoPush::not_in_schema`]) and leaves it for a person to drop.
 
 use lumen_schema::checked::{IndexKind, ModelKind, Schema, SortOrder};
 use mongodb::IndexModel;
@@ -34,10 +37,30 @@ pub struct MongoCollection {
 pub enum MongoStep {
     /// Create a collection.
     CreateCollection(String),
-    /// Drop an index (collection, index).
+    /// Drop an index (collection, index) the schema has with a different definition, to create it
+    /// again with the schema's.
     DropIndex(String, String),
     /// Create an index.
     CreateIndex(String, String),
+}
+
+/// An index in the database that the schema does not have, on a collection the schema has.
+/// `db push` leaves it as it is.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExtraIndex {
+    /// The collection.
+    pub collection: String,
+    /// The index.
+    pub index: MongoIndex,
+}
+
+/// What `db push` did, and what it left alone.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct MongoPush {
+    /// The steps it ran, in order.
+    pub steps: Vec<MongoStep>,
+    /// Indexes the schema does not have; reported, never dropped.
+    pub not_in_schema: Vec<ExtraIndex>,
 }
 
 fn cut(name: String) -> String {
@@ -152,7 +175,8 @@ pub async fn describe(db: &mongodb::Database) -> Result<Vec<MongoCollection>, Mi
     Ok(out)
 }
 
-/// The steps from `live` to `target`.
+/// The steps from `live` to `target`. Indexes `target` does not have get no step (see
+/// [`not_in_schema`]).
 #[must_use]
 pub fn diff(live: &[MongoCollection], target: &[MongoCollection]) -> Vec<MongoStep> {
     let mut steps = Vec::new();
@@ -172,23 +196,78 @@ pub fn diff(live: &[MongoCollection], target: &[MongoCollection]) -> Vec<MongoSt
                 None => steps.push(MongoStep::CreateIndex(t.name.clone(), i.name.clone())),
             }
         }
-        for h in have {
-            if !t.indexes.iter().any(|i| i.name == h.name) {
-                steps.push(MongoStep::DropIndex(t.name.clone(), h.name.clone()));
-            }
-        }
     }
     steps.sort();
     steps
 }
 
-/// `db push`: make the collections and indexes in `db` match `schema`. Returns what was done.
+/// The indexes in `live` that `target` does not have, on the collections `target` has.
+#[must_use]
+pub fn not_in_schema(live: &[MongoCollection], target: &[MongoCollection]) -> Vec<ExtraIndex> {
+    let mut out = Vec::new();
+    for t in target {
+        let Some(l) = live.iter().find(|l| l.name == t.name) else {
+            continue;
+        };
+        for h in &l.indexes {
+            if !t.indexes.iter().any(|i| i.name == h.name) {
+                out.push(ExtraIndex {
+                    collection: t.name.clone(),
+                    index: h.clone(),
+                });
+            }
+        }
+    }
+    out
+}
+
+/// MongoDB refuses a second index over the same keys, so an index the schema asks for that
+/// a kept index already covers is a clear error before anything runs, not a refusal halfway.
+fn check_clashes(
+    steps: &[MongoStep],
+    target: &[MongoCollection],
+    extra: &[ExtraIndex],
+) -> Result<(), MigrateError> {
+    for step in steps {
+        let MongoStep::CreateIndex(c, name) = step else {
+            continue;
+        };
+        let Some(wanted) = target
+            .iter()
+            .find(|t| &t.name == c)
+            .and_then(|t| t.indexes.iter().find(|i| &i.name == name))
+        else {
+            continue;
+        };
+        if let Some(e) = extra
+            .iter()
+            .find(|e| &e.collection == c && e.index.keys == wanted.keys)
+        {
+            let other = &e.index.name;
+            return Err(MigrateError::new(format!(
+                "cannot create index {name} on {c}: the index {other}, which the schema does not \
+                 have, is on the same keys, and lumen does not drop indexes it was not asked for. \
+                 Drop it by hand (in mongosh: db.{c}.dropIndex(\"{other}\")) or keep it by giving \
+                 the schema's index map: \"{other}\"."
+            )));
+        }
+    }
+    Ok(())
+}
+
+/// `db push`: create the collections and indexes `schema` has in `db`, and rebuild its indexes
+/// whose definition changed. Returns what was done and the indexes the schema does not have,
+/// which are left as they are.
 ///
 /// # Errors
-/// When the server refuses a step (for example a unique index over duplicate values).
-pub async fn push(db: &mongodb::Database, schema: &Schema) -> Result<Vec<MongoStep>, MigrateError> {
+/// When the server refuses a step (for example a unique index over duplicate values), or an index
+/// to create has the same keys as one the schema does not have (nothing is run then).
+pub async fn push(db: &mongodb::Database, schema: &Schema) -> Result<MongoPush, MigrateError> {
     let target = calculate(schema);
-    let steps = diff(&describe(db).await?, &target);
+    let live = describe(db).await?;
+    let steps = diff(&live, &target);
+    let extra = not_in_schema(&live, &target);
+    check_clashes(&steps, &target, &extra)?;
     let err = |e: mongodb::error::Error| MigrateError::new(format!("MongoDB refused a step: {e}"));
     for step in &steps {
         match step {
@@ -221,5 +300,8 @@ pub async fn push(db: &mongodb::Database, schema: &Schema) -> Result<Vec<MongoSt
             }
         }
     }
-    Ok(steps)
+    Ok(MongoPush {
+        steps,
+        not_in_schema: extra,
+    })
 }
