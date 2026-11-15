@@ -15,3 +15,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   attributes with arguments, arrays, functions and `{ .. }` objects) into a syntax tree with spans.
   `//`, `///`, `/* */` and `/** */` comments are kept. A broken line becomes one diagnostic and the rest
   of the file still parses; diagnostics print the source line with the problem underlined and a hint.
+- `lumen_schema::check`: the checked schema (models, views, enums, composite types, datasource,
+  generators, indexes, defaults, native types and paired relations) with Prisma's rules. Clear
+  messages with "did you mean" hints for unknown types, attributes and native types; a missing
+  opposite relation field names both models and the field to add. `SetNull` on a required foreign
+  key is a warning, as in Prisma. `// lumen: renamed from old` comments are kept for migrations.

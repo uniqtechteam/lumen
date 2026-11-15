@@ -10,6 +10,7 @@
 //! ```
 
 pub mod ast;
+pub mod checked;
 pub mod diagnostics;
 pub mod lexer;
 mod parser;
@@ -26,6 +27,15 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 #[must_use]
 pub fn parse(file: &SourceFile) -> (ast::SchemaAst, Diagnostics) {
     parse_file(file, FileId(0))
+}
+
+/// Parse and check one schema file: names resolved, types known, relations paired. The checked
+/// schema always comes back, with every problem found.
+#[must_use]
+pub fn check(file: &SourceFile) -> (checked::Schema, Diagnostics) {
+    let (ast, mut diagnostics) = parse(file);
+    let schema = checked::check(&ast, &mut diagnostics);
+    (schema, diagnostics)
 }
 
 /// Like [`parse`], for one file among several (spans carry `id`).
