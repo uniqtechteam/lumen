@@ -99,3 +99,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   from the URL and connects on first use.
 - MongoDB clients fill `@default(uuid())` / `uuid(7)` ids themselves, as Prisma does, so a
   collection with string UUID ids (for example one written by another app) works as it is.
+- `docs/prisma-users.md`: Prisma commands, client calls, filters, types and errors next to their
+  lumen form.
+- `bench/`: `include_posts()` against a query per user (statements and median time) with the
+  script that draws `docs/img/includes.svg`.
+
+### Fixed
+
+- `lumen generate` prints the client's path as `src/db.rs` rather than `prisma/../src/db.rs`.

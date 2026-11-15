@@ -145,12 +145,32 @@ fn output_path(schema_path: &Path, schema: &Schema, given: Option<&Path>) -> Pat
         .find(|g| matches!(&g.provider, Some(StringOrEnv::Literal(p)) if p.starts_with("lumen")))
         .and_then(|g| g.output.as_ref());
     match from_schema {
-        Some(out) => schema_path
-            .parent()
-            .unwrap_or_else(|| Path::new("."))
-            .join(out),
+        Some(out) => tidy(
+            &schema_path
+                .parent()
+                .unwrap_or_else(|| Path::new("."))
+                .join(out),
+        ),
         None => PathBuf::from("src/db.rs"),
     }
+}
+
+/// `prisma/../src/db.rs` → `src/db.rs`, without touching the disk.
+fn tidy(path: &Path) -> PathBuf {
+    use std::path::Component;
+    let mut out = PathBuf::new();
+    for c in path.components() {
+        match c {
+            Component::CurDir => {}
+            Component::ParentDir
+                if matches!(out.components().next_back(), Some(Component::Normal(_))) =>
+            {
+                out.pop();
+            }
+            other => out.push(other),
+        }
+    }
+    out
 }
 
 /// `lumen generate`.
