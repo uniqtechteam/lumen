@@ -1,0 +1,54 @@
+# CI on our own GitLab runner (Linux). GitHub Actions is off while the repo is private.
+
+default:
+  image: rust:1-bookworm
+  interruptible: true
+  before_script:
+    - rustup component add rustfmt clippy
+  cache:
+    key: cargo-$CI_JOB_NAME
+    paths: [.cargo/registry, .cargo/git, target/]
+
+variables:
+  CARGO_HOME: $CI_PROJECT_DIR/.cargo
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH
+
+lint:
+  script:
+    - cargo fmt --all --check
+    - cargo clippy --workspace --all-targets --all-features -- -D warnings
+
+# Postgres 16, a one-node MongoDB 7 replica set (for transactions) and the real Prisma CLI.
+test:
+  services:
+    - name: postgres:16
+      alias: postgres
+      variables:
+        POSTGRES_PASSWORD: lumen
+        POSTGRES_DB: lumen
+    - name: mongo:7
+      alias: mongo
+      entrypoint: ["bash", "-c"]
+      command:
+        - >-
+          mongod --replSet rs0 --bind_ip_all --fork --logpath /tmp/mongod.log &&
+          mongosh --quiet --eval 'rs.initiate({_id: "rs0", members: [{_id: 0, host: "localhost:27017"}]})' &&
+          tail -f /tmp/mongod.log
+  variables:
+    LUMEN_TEST_POSTGRES_URL: postgres://postgres:lumen@postgres:5432/lumen
+    LUMEN_TEST_MONGO_URL: mongodb://mongo:27017/?directConnection=true
+    LUMEN_TEST_PRISMA: "1"
+  script:
+    - apt-get update -qq && apt-get install -y -qq nodejs npm > /dev/null
+    - cargo test --workspace --all-features
+
+deny:
+  script:
+    - cargo install --locked cargo-deny
+    - cargo deny check
