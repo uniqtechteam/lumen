@@ -6,13 +6,13 @@ datasource db {
 }
 
 model Product {
-  id       String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  sku      String   @unique
-  price    Decimal  @db.Decimal(10, 2)
-  data     Json     @default("{}")
+  id       String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sku      String                @unique
+  price    Decimal               @db.Decimal(10, 2)
+  data     Json                  @default("{}")
   image    Bytes?
   location Unsupported("point")?
-  archived Boolean  @default(false)
+  archived Boolean               @default(false)
   lines    OrderLine[]
 
   @@index([sku], where: { archived: false })

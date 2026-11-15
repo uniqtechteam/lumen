@@ -12,6 +12,7 @@
 pub mod ast;
 pub mod checked;
 pub mod diagnostics;
+mod format;
 pub mod lexer;
 mod parser;
 pub mod span;
@@ -36,6 +37,15 @@ pub fn check(file: &SourceFile) -> (checked::Schema, Diagnostics) {
     let (ast, mut diagnostics) = parse(file);
     let schema = checked::check(&ast, &mut diagnostics);
     (schema, diagnostics)
+}
+
+/// The file in lumen's canonical layout (the same as Prisma's). Formatting never fails: broken
+/// lines are kept as written, and problems found while reading go into the diagnostics.
+#[must_use]
+pub fn format(file: &SourceFile) -> (String, Diagnostics) {
+    let mut diagnostics = Diagnostics::default();
+    let text = format::format_text(file, &mut diagnostics);
+    (text, diagnostics)
 }
 
 /// Like [`parse`], for one file among several (spans carry `id`).

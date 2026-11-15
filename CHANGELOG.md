@@ -20,3 +20,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   messages with "did you mean" hints for unknown types, attributes and native types; a missing
   opposite relation field names both models and the field to add. `SetNull` on a required foreign
   key is a warning, as in Prisma. `// lumen: renamed from old` comments are kept for migrations.
+- `lumen_schema::format`: the canonical layout (the same as Prisma's): aligned field and setting
+  columns, attributes in canonical order, block attributes after the fields, canonical spacing in
+  values, comments kept exactly. It adds the missing side of a one-sided relation (with its foreign
+  key field when needed), and formats around broken lines without disturbing the rest.
