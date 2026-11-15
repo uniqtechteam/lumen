@@ -28,3 +28,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   columns with `format_type()` types, normalised defaults, primary keys, indexes, foreign keys,
   enums), calculated from a checked schema with Prisma's rules (types, constraint names, default
   referential actions, `_AToB` join tables) or read from a live Postgres through `pg_catalog`.
+- `lumen_migrate::diff`, `postgres::script` and `check`: the ordered steps from one shape to
+  another, rendered as Postgres SQL in the style of Prisma's migration files. Renames from
+  `// lumen: renamed from` hints are real renames (tables, columns, and the keys and indexes whose
+  names follow them). Safe type changes run in place; casts that cannot work drop and add the column
+  with a warning; removing enum values rebuilds the type. Destructive and impossible steps are found
+  first, worded without a database for the file header or with real counts against one.
