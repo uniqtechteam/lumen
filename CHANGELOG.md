@@ -6,6 +6,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+This will be 0.1.0. Some planned work moved to 0.2: aggregates and `groupBy`, cursor pagination
+and ordering by relation count, a `select` builder and `utoipa` schemas in the generated client,
+many-to-many and nested includes in the generated client, `generate --watch`, `db pull` for
+Postgres, the `time` crate option, and testing on more Postgres versions and on macOS and Windows.
+The README's Limits section has the full list.
+
 ### Added
 
 - Project setup: the `lumen-orm`, `lumen-schema`, `lumen-migrate`, `lumen-codegen` and `lumen-cli` crates,

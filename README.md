@@ -269,8 +269,19 @@ Without a terminal, a command that would lose data stops and asks you to pass
 ## Limits
 
 - No SQLite, MySQL or SQL Server. Postgres and MongoDB only.
-- Not in 0.1: many-to-many includes, nested includes in the generated client (the query builder
-  has them), `db pull` for Postgres, `generate --watch`.
+- 0.1 is tested on Postgres 16 and MongoDB 7 on Linux. Release binaries are built for Linux, macOS
+  and Windows, but the database tests only run on Linux for now.
+- Planned for 0.2, not in 0.1:
+  - aggregates and `groupBy`
+  - cursor pagination, and ordering by the number of related rows
+  - a `select` builder on `find_many`, and `utoipa::ToSchema` on the generated types
+  - many-to-many and nested includes in the generated client (the query builder already has them)
+  - `generate --watch`
+  - `db pull` for Postgres
+  - the `time` crate as an option instead of `chrono`
+  - a test matrix over Postgres 13 to 17, plus database tests on macOS and Windows
+  - checking the parser and formatter against Prisma's example schemas and real open-source
+    projects. In 0.1 they are only checked against the schemas in lumen's own tests.
 - Nested writes in 0.1 are `create` and `connect` inside a create, on one-to-one and one-to-many
   relations with a single-column key. `connect_or_create`, `disconnect`, `set` and nested writes
   inside `update` come later.
