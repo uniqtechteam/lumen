@@ -509,8 +509,8 @@ pub(crate) fn complete(file: &SourceFile) -> String {
     // (byte offset, text) to insert, later offsets first
     let mut inserts: Vec<(usize, String)> = Vec::new();
     for (mi, m) in schema.models.iter().enumerate() {
-        for fi in 0..m.fields.len() {
-            if m.fields[fi].relation.is_some() {
+        for (fi, field) in m.fields.iter().enumerate() {
+            if field.relation.is_some() {
                 continue;
             }
             let Some((target, lines)) = opposite_lines(&schema, mi, fi) else {
