@@ -83,3 +83,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   are serde documents, `ObjectId`, BSON dates and decimals, structs for composite types, defaults
   filled by the client (`now()`, literals, `@updatedAt`; the driver makes `_id`), relations through
   `$in` per level and everything runnable inside a transaction.
+- The `lumen` command (also installed as `lumen-db`): `init` (schema, `.env` and the migrations
+  folder for Postgres or MongoDB), `format [--check]`, `validate`, `generate [--output]`,
+  `migrate dev|deploy|status|reset|diff|resolve` and `db push|pull`. It finds
+  `schema.prisma` or `prisma/schema.prisma` like Prisma, reads `DATABASE_URL` from `.env` (the shell
+  wins), asks before losing data when someone is at the terminal and refuses otherwise unless
+  `--accept-data-loss` is given, and runs `generate` after `migrate dev`, `migrate reset` and
+  `db push`. `db pull` reads MongoDB for now; Postgres follows in 0.2.
+- `lumen_migrate::commands::push`, `diff_sql` and `resolve` behind `db push`, `migrate diff` and
+  `migrate resolve`.
+- Release binaries for Linux (x86_64, arm64), macOS (arm64, x86_64) and Windows, attached to each
+  `v*` tag with SHA-256 sums.

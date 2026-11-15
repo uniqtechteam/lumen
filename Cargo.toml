@@ -22,6 +22,7 @@ categories = ["database"]
 lumen-schema = { path = "crates/lumen-schema", version = "0.1.0-dev" }
 lumen-migrate = { path = "crates/lumen-migrate", version = "0.1.0-dev" }
 lumen-orm = { path = "crates/lumen-orm", version = "0.1.0-dev" }
+lumen-codegen = { path = "crates/lumen-codegen", version = "0.1.0-dev" }
 clap = { version = "4.5", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
