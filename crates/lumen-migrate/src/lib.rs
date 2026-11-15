@@ -8,6 +8,7 @@ pub mod check;
 pub mod commands;
 pub mod diff;
 pub mod history;
+pub mod mongo;
 pub mod postgres;
 pub mod shape;
 

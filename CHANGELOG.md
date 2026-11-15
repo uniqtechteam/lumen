@@ -64,3 +64,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   records; a required to-one is not an `Option`). Enums become Rust enums. `@updatedAt` and
   `uuid()` are filled by the client. Errors name fields through the schema's constraint names.
   Everything runs on the pool or inside a transaction. The output is byte-for-byte stable.
+- MongoDB (`lumen-orm` feature `mongodb`): `MongoDb` with find (filters, sort, skip, limit,
+  projection), count, insert, update and delete. The same `Filter` renders to a BSON query
+  (`$regex` with escaping and case-insensitive mode, `$in`, `$nor` for NOT, ObjectIds) and gives
+  the same results as on Postgres. Unique-index errors are P2002.
+- `lumen_migrate::mongo::push`: `db push` for MongoDB, managing collections and Prisma-named
+  indexes (created, rebuilt when changed, dropped when removed; collections are never dropped).
