@@ -49,18 +49,20 @@ jobs:
         ports: ["5432:5432"]
         options: >-
           --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
-      mongo:
-        image: mongo:7
-        ports: ["27017:27017"]
-        options: >-
-          --health-cmd "mongosh --quiet --eval 'db.runCommand({ ping: 1 }).ok'" --health-interval 5s --health-timeout 5s --health-retries 10
     env:
       LUMEN_TEST_POSTGRES_URL: postgres://postgres:lumen@localhost:5432/lumen
-      LUMEN_TEST_MONGO_URL: mongodb://localhost:27017
+      LUMEN_TEST_MONGO_URL: mongodb://localhost:27017/?directConnection=true
       # migrations are also checked against the real Prisma CLI (tests/prisma_interop.rs)
       LUMEN_TEST_PRISMA: "1"
     steps:
       - uses: actions/checkout@v4
+      # a one-node replica set, so MongoDB transactions can be tested
+      - name: start MongoDB 7 as a replica set
+        run: |
+          docker run -d --name mongo -p 27017:27017 mongo:7 --replSet rs0 --bind_ip_all
+          for i in $(seq 1 30); do docker exec mongo mongosh --quiet --eval 'db.runCommand({ ping: 1 }).ok' && break; sleep 2; done
+          docker exec mongo mongosh --quiet --eval 'rs.initiate({ _id: "rs0", members: [{ _id: 0, host: "localhost:27017" }] })'
+          for i in $(seq 1 30); do docker exec mongo mongosh --quiet --eval 'db.hello().isWritablePrimary' | grep -q true && break; sleep 2; done
       - uses: actions/setup-node@v4
         with:
           node-version: 22

@@ -4,6 +4,7 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
+use mongodb::ClientSession;
 use mongodb::bson::{self, Bson, Document, doc};
 use mongodb::options::FindOptions;
 use serde::Serialize;
@@ -176,7 +177,75 @@ fn mongo_err(e: &mongodb::error::Error) -> Error {
             "a record with the same unique value already exists",
         );
     }
+    if message.contains("Transaction numbers are only allowed") || message.contains("replica set") {
+        return Error::new(
+            "P2010",
+            format!("MongoDB transactions need a replica set or a sharded cluster ({message})"),
+        );
+    }
     Error::new("P2010", message)
+}
+
+/// The query and options of a find.
+fn find_parts(find: &Find) -> Result<(Document, FindOptions)> {
+    let filter = find
+        .filter
+        .as_ref()
+        .map(query_of)
+        .transpose()?
+        .unwrap_or_default();
+    let mut options = FindOptions::default();
+    if !find.order.is_empty() {
+        options.sort = Some(sort_doc(&find.order));
+    }
+    options.limit = find.limit;
+    options.skip = find.skip;
+    if !find.fields.is_empty() {
+        let mut projection = Document::new();
+        for f in &find.fields {
+            projection.insert(f.clone(), 1);
+        }
+        options.projection = Some(projection);
+    }
+    Ok((filter, options))
+}
+
+fn sort_doc(order: &[(String, Order)]) -> Document {
+    let mut sort = Document::new();
+    for (f, o) in order {
+        sort.insert(f.clone(), if *o == Order::Desc { -1 } else { 1 });
+    }
+    sort
+}
+
+/// At most `n` documents per value of `key`, in the find's order, done on the server with
+/// `$setWindowFields` (MongoDB 5+), like `ROW_NUMBER()` on Postgres.
+fn per_key_pipeline(find: &Find, key: &str, n: i64) -> Result<Vec<Document>> {
+    let filter = find
+        .filter
+        .as_ref()
+        .map(query_of)
+        .transpose()?
+        .unwrap_or_default();
+    let mut sort = sort_doc(&find.order);
+    if sort.is_empty() {
+        sort.insert("_id", 1);
+    }
+    let mut pipeline = vec![
+        doc! { "$match": filter },
+        doc! { "$setWindowFields": { "partitionBy": format!("${key}"), "sortBy": sort.clone(), "output": { "__lumen_rn": { "$documentNumber": {} } } } },
+        doc! { "$match": { "__lumen_rn": { "$lte": n } } },
+        doc! { "$unset": "__lumen_rn" },
+        doc! { "$sort": sort },
+    ];
+    if !find.fields.is_empty() {
+        let mut projection = Document::new();
+        for f in &find.fields {
+            projection.insert(f.clone(), 1);
+        }
+        pipeline.push(doc! { "$project": projection });
+    }
+    Ok(pipeline)
 }
 
 /// A MongoDB database, with a statement counter like [`crate::Db`].
@@ -229,29 +298,7 @@ impl MongoDb {
     /// A coded [`Error`].
     pub async fn find<T: DeserializeOwned + Send + Sync>(&self, find: &Find) -> Result<Vec<T>> {
         self.tick();
-        let filter = find
-            .filter
-            .as_ref()
-            .map(query_of)
-            .transpose()?
-            .unwrap_or_default();
-        let mut options = FindOptions::default();
-        if !find.order.is_empty() {
-            let mut sort = Document::new();
-            for (f, o) in &find.order {
-                sort.insert(f.clone(), if *o == Order::Desc { -1 } else { 1 });
-            }
-            options.sort = Some(sort);
-        }
-        options.limit = find.limit;
-        options.skip = find.skip;
-        if !find.fields.is_empty() {
-            let mut projection = Document::new();
-            for f in &find.fields {
-                projection.insert(f.clone(), 1);
-            }
-            options.projection = Some(projection);
-        }
+        let (filter, options) = find_parts(find)?;
         let mut cursor = self
             .db
             .collection::<T>(&find.collection)
@@ -268,6 +315,72 @@ impl MongoDb {
             );
         }
         Ok(out)
+    }
+
+    /// At most `n` matching documents per value of `key`.
+    ///
+    /// # Errors
+    /// A coded [`Error`].
+    pub async fn find_per_key<T: DeserializeOwned + Send + Sync>(
+        &self,
+        find: &Find,
+        key: &str,
+        n: i64,
+    ) -> Result<Vec<T>> {
+        self.tick();
+        let mut cursor = self
+            .db
+            .collection::<Document>(&find.collection)
+            .aggregate(per_key_pipeline(find, key, n)?)
+            .await
+            .map_err(|e| mongo_err(&e))?;
+        let mut out = Vec::new();
+        while cursor.advance().await.map_err(|e| mongo_err(&e))? {
+            let d = cursor
+                .deserialize_current()
+                .map_err(|e| Error::new("P2023", e.to_string()))?;
+            out.push(bson::from_document(d).map_err(|e| Error::new("P2023", e.to_string()))?);
+        }
+        Ok(out)
+    }
+
+    /// Run `f` in a transaction (needs a replica set): committed when it returns `Ok`, aborted when
+    /// it returns `Err`.
+    ///
+    /// # Errors
+    /// The error `f` returned, or a coded [`Error`] (P2010 on a standalone server).
+    pub async fn transaction<T, F>(&self, f: F) -> Result<T>
+    where
+        F: AsyncFnOnce(&mut MongoTx) -> Result<T>,
+    {
+        let mut session = self
+            .db
+            .client()
+            .start_session()
+            .await
+            .map_err(|e| mongo_err(&e))?;
+        session
+            .start_transaction()
+            .await
+            .map_err(|e| mongo_err(&e))?;
+        let mut tx = MongoTx {
+            db: self.db.clone(),
+            session,
+            statements: Arc::clone(&self.statements),
+        };
+        match f(&mut tx).await {
+            Ok(v) => {
+                tx.session
+                    .commit_transaction()
+                    .await
+                    .map_err(|e| mongo_err(&e))?;
+                Ok(v)
+            }
+            Err(e) => {
+                let _ = tx.session.abort_transaction().await;
+                Err(e)
+            }
+        }
     }
 
     /// How many documents match.
@@ -346,6 +459,365 @@ impl MongoDb {
             .map(|r| r.deleted_count)
             .map_err(|e| mongo_err(&e))
     }
+}
+
+/// An open MongoDB transaction; see [`MongoDb::transaction`].
+#[derive(Debug)]
+pub struct MongoTx {
+    db: mongodb::Database,
+    session: ClientSession,
+    statements: Arc<AtomicU64>,
+}
+
+/// Something MongoDB operations run on: the database (`&MongoDb`) or a transaction (`MongoTx`).
+#[allow(
+    async_fn_in_trait,
+    reason = "lumen's own code and the generated client are the callers"
+)]
+pub trait MongoRun {
+    /// The matching documents.
+    ///
+    /// # Errors
+    /// A coded [`Error`].
+    async fn find<T: DeserializeOwned + Send + Sync>(&mut self, find: &Find) -> Result<Vec<T>>;
+    /// At most `n` matching documents per value of `key`.
+    ///
+    /// # Errors
+    /// A coded [`Error`].
+    async fn find_per_key<T: DeserializeOwned + Send + Sync>(
+        &mut self,
+        find: &Find,
+        key: &str,
+        n: i64,
+    ) -> Result<Vec<T>>;
+    /// How many documents match.
+    ///
+    /// # Errors
+    /// A coded [`Error`].
+    async fn count(&mut self, collection: &str, filter: Option<&Filter>) -> Result<u64>;
+    /// Insert documents; their ids.
+    ///
+    /// # Errors
+    /// A coded [`Error`].
+    async fn insert_many<T: Serialize + Send + Sync>(
+        &mut self,
+        collection: &str,
+        docs: &[T],
+    ) -> Result<Vec<Bson>>;
+    /// Set fields on the matching documents; how many matched.
+    ///
+    /// # Errors
+    /// A coded [`Error`].
+    async fn update_many(
+        &mut self,
+        collection: &str,
+        filter: Option<&Filter>,
+        set: Vec<(String, Value)>,
+    ) -> Result<u64>;
+    /// Remove the matching documents; how many.
+    ///
+    /// # Errors
+    /// A coded [`Error`].
+    async fn delete_many(&mut self, collection: &str, filter: Option<&Filter>) -> Result<u64>;
+}
+
+impl MongoRun for &MongoDb {
+    async fn find<T: DeserializeOwned + Send + Sync>(&mut self, find: &Find) -> Result<Vec<T>> {
+        MongoDb::find(self, find).await
+    }
+    async fn find_per_key<T: DeserializeOwned + Send + Sync>(
+        &mut self,
+        find: &Find,
+        key: &str,
+        n: i64,
+    ) -> Result<Vec<T>> {
+        MongoDb::find_per_key(self, find, key, n).await
+    }
+    async fn count(&mut self, collection: &str, filter: Option<&Filter>) -> Result<u64> {
+        MongoDb::count(self, collection, filter).await
+    }
+    async fn insert_many<T: Serialize + Send + Sync>(
+        &mut self,
+        collection: &str,
+        docs: &[T],
+    ) -> Result<Vec<Bson>> {
+        MongoDb::insert_many(self, collection, docs).await
+    }
+    async fn update_many(
+        &mut self,
+        collection: &str,
+        filter: Option<&Filter>,
+        set: Vec<(String, Value)>,
+    ) -> Result<u64> {
+        MongoDb::update_many(self, collection, filter, set).await
+    }
+    async fn delete_many(&mut self, collection: &str, filter: Option<&Filter>) -> Result<u64> {
+        MongoDb::delete_many(self, collection, filter).await
+    }
+}
+
+impl<T: MongoRun> MongoRun for &mut T {
+    async fn find<U: DeserializeOwned + Send + Sync>(&mut self, find: &Find) -> Result<Vec<U>> {
+        (**self).find(find).await
+    }
+    async fn find_per_key<U: DeserializeOwned + Send + Sync>(
+        &mut self,
+        find: &Find,
+        key: &str,
+        n: i64,
+    ) -> Result<Vec<U>> {
+        (**self).find_per_key(find, key, n).await
+    }
+    async fn count(&mut self, collection: &str, filter: Option<&Filter>) -> Result<u64> {
+        (**self).count(collection, filter).await
+    }
+    async fn insert_many<U: Serialize + Send + Sync>(
+        &mut self,
+        collection: &str,
+        docs: &[U],
+    ) -> Result<Vec<Bson>> {
+        (**self).insert_many(collection, docs).await
+    }
+    async fn update_many(
+        &mut self,
+        collection: &str,
+        filter: Option<&Filter>,
+        set: Vec<(String, Value)>,
+    ) -> Result<u64> {
+        (**self).update_many(collection, filter, set).await
+    }
+    async fn delete_many(&mut self, collection: &str, filter: Option<&Filter>) -> Result<u64> {
+        (**self).delete_many(collection, filter).await
+    }
+}
+
+impl MongoRun for MongoTx {
+    async fn find<T: DeserializeOwned + Send + Sync>(&mut self, find: &Find) -> Result<Vec<T>> {
+        self.statements.fetch_add(1, Ordering::Relaxed);
+        let (filter, options) = find_parts(find)?;
+        let mut cursor = self
+            .db
+            .collection::<T>(&find.collection)
+            .find(filter)
+            .with_options(options)
+            .session(&mut self.session)
+            .await
+            .map_err(|e| mongo_err(&e))?;
+        let mut out = Vec::new();
+        while cursor
+            .advance(&mut self.session)
+            .await
+            .map_err(|e| mongo_err(&e))?
+        {
+            out.push(
+                cursor
+                    .deserialize_current()
+                    .map_err(|e| Error::new("P2023", e.to_string()))?,
+            );
+        }
+        Ok(out)
+    }
+
+    async fn find_per_key<T: DeserializeOwned + Send + Sync>(
+        &mut self,
+        find: &Find,
+        key: &str,
+        n: i64,
+    ) -> Result<Vec<T>> {
+        self.statements.fetch_add(1, Ordering::Relaxed);
+        let mut cursor = self
+            .db
+            .collection::<Document>(&find.collection)
+            .aggregate(per_key_pipeline(find, key, n)?)
+            .session(&mut self.session)
+            .await
+            .map_err(|e| mongo_err(&e))?;
+        let mut out = Vec::new();
+        while cursor
+            .advance(&mut self.session)
+            .await
+            .map_err(|e| mongo_err(&e))?
+        {
+            let d = cursor
+                .deserialize_current()
+                .map_err(|e| Error::new("P2023", e.to_string()))?;
+            out.push(bson::from_document(d).map_err(|e| Error::new("P2023", e.to_string()))?);
+        }
+        Ok(out)
+    }
+
+    async fn count(&mut self, collection: &str, filter: Option<&Filter>) -> Result<u64> {
+        self.statements.fetch_add(1, Ordering::Relaxed);
+        let filter = filter.map(query_of).transpose()?.unwrap_or_default();
+        self.db
+            .collection::<Document>(collection)
+            .count_documents(filter)
+            .session(&mut self.session)
+            .await
+            .map_err(|e| mongo_err(&e))
+    }
+
+    async fn insert_many<T: Serialize + Send + Sync>(
+        &mut self,
+        collection: &str,
+        docs: &[T],
+    ) -> Result<Vec<Bson>> {
+        self.statements.fetch_add(1, Ordering::Relaxed);
+        if docs.is_empty() {
+            return Ok(Vec::new());
+        }
+        let result = self
+            .db
+            .collection::<T>(collection)
+            .insert_many(docs)
+            .session(&mut self.session)
+            .await
+            .map_err(|e| mongo_err(&e))?;
+        let mut ids: Vec<(usize, Bson)> = result.inserted_ids.into_iter().collect();
+        ids.sort_by_key(|(i, _)| *i);
+        Ok(ids.into_iter().map(|(_, id)| id).collect())
+    }
+
+    async fn update_many(
+        &mut self,
+        collection: &str,
+        filter: Option<&Filter>,
+        set: Vec<(String, Value)>,
+    ) -> Result<u64> {
+        self.statements.fetch_add(1, Ordering::Relaxed);
+        let filter = filter.map(query_of).transpose()?.unwrap_or_default();
+        let mut fields = Document::new();
+        for (k, v) in &set {
+            fields.insert(k.clone(), bson_of(v)?);
+        }
+        self.db
+            .collection::<Document>(collection)
+            .update_many(filter, doc! { "$set": fields })
+            .session(&mut self.session)
+            .await
+            .map(|r| r.matched_count)
+            .map_err(|e| mongo_err(&e))
+    }
+
+    async fn delete_many(&mut self, collection: &str, filter: Option<&Filter>) -> Result<u64> {
+        self.statements.fetch_add(1, Ordering::Relaxed);
+        let filter = filter.map(query_of).transpose()?.unwrap_or_default();
+        self.db
+            .collection::<Document>(collection)
+            .delete_many(filter)
+            .session(&mut self.session)
+            .await
+            .map(|r| r.deleted_count)
+            .map_err(|e| mongo_err(&e))
+    }
+}
+
+fn with_filter(find: &Find, extra: Filter) -> Find {
+    let mut f = find.clone();
+    f.filter = Some(match f.filter.take() {
+        Some(existing) => existing.and(extra),
+        None => extra,
+    });
+    f
+}
+
+/// The children of each parent, in the parents' order, in one query: `child_field` holds the
+/// parent's key (`$in`). `take` keeps at most that many children per parent, on the server.
+///
+/// # Errors
+/// A coded [`Error`].
+pub async fn load_many<R, P, C, K>(
+    run: &mut R,
+    parents: &[P],
+    parent_key: impl Fn(&P) -> Option<K>,
+    child: &Find,
+    child_field: &str,
+    child_key: impl Fn(&C) -> Option<K>,
+    take: Option<i64>,
+) -> Result<Vec<Vec<C>>>
+where
+    R: MongoRun,
+    C: DeserializeOwned + Send + Sync,
+    K: Eq + std::hash::Hash + Clone + Into<Value>,
+{
+    let mut seen = std::collections::HashSet::new();
+    let keys: Vec<K> = parents
+        .iter()
+        .filter_map(&parent_key)
+        .filter(|k| seen.insert(k.clone()))
+        .collect();
+    let mut grouped: std::collections::HashMap<K, Vec<C>> = std::collections::HashMap::new();
+    if !keys.is_empty() {
+        let find = with_filter(
+            child,
+            Filter::Column(
+                child_field.to_owned(),
+                Op::Any(keys.into_iter().map(Into::into).collect()),
+            ),
+        );
+        let rows: Vec<C> = match take {
+            Some(n) => run.find_per_key(&find, child_field, n).await?,
+            None => run.find(&find).await?,
+        };
+        for c in rows {
+            if let Some(k) = child_key(&c) {
+                grouped.entry(k).or_default().push(c);
+            }
+        }
+    }
+    Ok(parents
+        .iter()
+        .map(|p| {
+            parent_key(p)
+                .and_then(|k| grouped.get_mut(&k).map(std::mem::take))
+                .unwrap_or_default()
+        })
+        .collect())
+}
+
+/// The one related document of each parent (or `None`), in the parents' order, in one query.
+///
+/// # Errors
+/// A coded [`Error`].
+pub async fn load_one<R, P, C, K>(
+    run: &mut R,
+    parents: &[P],
+    parent_key: impl Fn(&P) -> Option<K>,
+    child: &Find,
+    child_field: &str,
+    child_key: impl Fn(&C) -> Option<K>,
+) -> Result<Vec<Option<C>>>
+where
+    R: MongoRun,
+    C: DeserializeOwned + Send + Sync + Clone,
+    K: Eq + std::hash::Hash + Clone + Into<Value>,
+{
+    let mut seen = std::collections::HashSet::new();
+    let keys: Vec<K> = parents
+        .iter()
+        .filter_map(&parent_key)
+        .filter(|k| seen.insert(k.clone()))
+        .collect();
+    let mut found: std::collections::HashMap<K, C> = std::collections::HashMap::new();
+    if !keys.is_empty() {
+        let find = with_filter(
+            child,
+            Filter::Column(
+                child_field.to_owned(),
+                Op::Any(keys.into_iter().map(Into::into).collect()),
+            ),
+        );
+        for c in run.find::<C>(&find).await? {
+            if let Some(k) = child_key(&c) {
+                found.entry(k).or_insert(c);
+            }
+        }
+    }
+    // several parents may share one related document, so it is cloned, not moved
+    Ok(parents
+        .iter()
+        .map(|p| parent_key(p).and_then(|k| found.get(&k).cloned()))
+        .collect())
 }
 
 #[cfg(test)]
