@@ -42,6 +42,17 @@ let users = db
 It reads the same `schema.prisma` files Prisma reads and keeps migrations in the same layout, so a
 project can move between the two.
 
+## Getting started
+
+```bash
+cargo install lumen-cli        # or a binary from the releases page
+lumen init                     # prisma/schema.prisma, .env and prisma/migrations
+lumen migrate dev --name init  # on MongoDB: lumen db push
+```
+
+Then put `#[rustfmt::skip] mod db;` in your crate and add `lumen-orm` to its dependencies (with the `mongodb` feature on MongoDB). Run
+`lumen --help` for every command; each one reads `DATABASE_URL` from `.env` like Prisma does.
+
 ## Credits
 
 lumen's design learns from [Prisma](https://github.com/prisma/prisma-engines) (Apache-2.0) and

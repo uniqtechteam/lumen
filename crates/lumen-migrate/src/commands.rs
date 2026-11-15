@@ -391,3 +391,147 @@ mod tests {
         );
     }
 }
+
+/// What `db push` did.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PushOutcome {
+    /// The database already matches the schema.
+    UpToDate,
+    /// The changes were applied.
+    Applied {
+        /// The SQL that ran.
+        sql: String,
+        /// Data-loss warnings that were accepted.
+        warnings: Vec<Finding>,
+    },
+    /// Data would be lost; run again with `accept_data_loss`.
+    NeedsConfirmation(Vec<Finding>),
+    /// A step cannot run on this data.
+    Blocked(Vec<Finding>),
+}
+
+/// `db push`: change the database to match the schema without writing a migration, in one
+/// transaction. For prototyping; the migration history is not touched.
+///
+/// # Errors
+/// When the database cannot be read or refuses a step.
+pub async fn push(project: &Project, accept_data_loss: bool) -> Result<PushOutcome, MigrateError> {
+    let pool = PgPool::connect(&project.database_url).await?;
+    let live = describe(&pool, &project.schemas()).await?;
+    let steps = diff(
+        &live,
+        &calculate(&project.schema),
+        &renames(&project.schema),
+    );
+    if steps.is_empty() {
+        pool.close().await;
+        return Ok(PushOutcome::UpToDate);
+    }
+    let findings = check::against(&pool, &steps).await?;
+    if findings
+        .iter()
+        .any(|f| f.severity == Severity::Unexecutable)
+    {
+        pool.close().await;
+        return Ok(PushOutcome::Blocked(findings));
+    }
+    if !findings.is_empty() && !accept_data_loss {
+        pool.close().await;
+        return Ok(PushOutcome::NeedsConfirmation(findings));
+    }
+    let sql = script(&steps, &[]);
+    let mut tx = pool.begin().await?;
+    // the script is rendered from the checked schema, every name quoted
+    sqlx::raw_sql(AssertSqlSafe(sql.clone()))
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| MigrateError::new(format!("the database refused the change: {e}")))?;
+    tx.commit().await?;
+    pool.close().await;
+    Ok(PushOutcome::Applied {
+        sql,
+        warnings: findings,
+    })
+}
+
+/// The SQL that takes the database (or an empty one, when `from_empty`) to the schema.
+///
+/// # Errors
+/// When the database cannot be read.
+pub async fn diff_sql(project: &Project, from_empty: bool) -> Result<String, MigrateError> {
+    let live = if from_empty {
+        Shape::default()
+    } else {
+        let pool = PgPool::connect(&project.database_url).await?;
+        let shape = describe(&pool, &project.schemas()).await?;
+        pool.close().await;
+        shape
+    };
+    let steps = diff(
+        &live,
+        &calculate(&project.schema),
+        &renames(&project.schema),
+    );
+    let warnings: Vec<String> = check::pure(&steps).into_iter().map(|f| f.message).collect();
+    Ok(script(&steps, &warnings))
+}
+
+/// How `migrate resolve` marks a migration.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Resolution {
+    /// It was applied by hand; record it as applied.
+    Applied,
+    /// It was undone by hand; record it as rolled back so it runs again.
+    RolledBack,
+}
+
+/// `migrate resolve`: record a migration as applied or rolled back without running it.
+///
+/// # Errors
+/// When the migration is not in the folder, or (for rolled back) has not failed.
+pub async fn resolve(project: &Project, name: &str, how: Resolution) -> Result<(), MigrateError> {
+    let local = history::read_dir(&project.migrations_dir)?;
+    let migration = local.iter().find(|m| m.name == name).ok_or_else(|| {
+        MigrateError::new(format!("there is no migration `{name}` in the folder"))
+    })?;
+    let mut conn = connect(&project.database_url).await?;
+    history::ensure_table(&mut conn).await?;
+    let state = compare(&local, &history::applied(&mut conn).await?);
+    match how {
+        Resolution::RolledBack => {
+            if !state.failed.iter().any(|f| f == name) {
+                return Err(MigrateError::new(format!(
+                    "`{name}` has not failed; only a failed migration can be marked rolled back"
+                )));
+            }
+            sqlx::query(
+                "update _prisma_migrations set rolled_back_at = now() \
+                 where migration_name = $1 and finished_at is null and rolled_back_at is null",
+            )
+            .bind(name)
+            .execute(&mut conn)
+            .await?;
+        }
+        Resolution::Applied => {
+            if state.applied.iter().any(|a| a == name) {
+                return Err(MigrateError::new(format!("`{name}` is already applied")));
+            }
+            sqlx::query(
+                "update _prisma_migrations set rolled_back_at = now() \
+                 where migration_name = $1 and finished_at is null and rolled_back_at is null",
+            )
+            .bind(name)
+            .execute(&mut conn)
+            .await?;
+            sqlx::query(
+                "insert into _prisma_migrations (id, checksum, migration_name, started_at, finished_at, applied_steps_count) \
+                 values (gen_random_uuid()::text, $1, $2, now(), now(), 0)",
+            )
+            .bind(migration.checksum())
+            .bind(name)
+            .execute(&mut conn)
+            .await?;
+        }
+    }
+    Ok(())
+}

@@ -21,6 +21,15 @@ path = "src/main.rs"
 
 [dependencies]
 clap.workspace = true
+lumen-codegen.workspace = true
+lumen-migrate.workspace = true
+lumen-schema.workspace = true
+mongodb.workspace = true
+tokio.workspace = true
+
+[dev-dependencies]
+sqlx.workspace = true
+tempfile = "3"
 
 [lints]
 workspace = true
