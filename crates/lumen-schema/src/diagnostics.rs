@@ -37,6 +37,17 @@ impl Diagnostic {
         }
     }
 
+    /// A warning with a hint.
+    #[must_use]
+    pub fn warning_help(span: Span, message: impl Into<String>, help: impl Into<String>) -> Self {
+        Self {
+            severity: Severity::Warning,
+            message: message.into(),
+            span,
+            help: Some(help.into()),
+        }
+    }
+
     fn with_help(mut self, help: impl Into<String>) -> Self {
         self.help = Some(help.into());
         self
@@ -124,6 +135,153 @@ impl Diagnostic {
     pub fn missing_field_type(span: Span, field: &str) -> Self {
         Self::error(span, format!("the field `{field}` has no type")).with_help(format!(
             "write its type after the name, for example `{field} String`"
+        ))
+    }
+
+    // ---- validation -----------------------------------------------------------------------
+
+    /// A model, enum or type named like a built-in type.
+    #[must_use]
+    pub fn reserved_name(span: Span, name: &str) -> Self {
+        Self::error(
+            span,
+            format!("`{name}` is a built-in type and cannot name a block"),
+        )
+    }
+
+    /// Two blocks with one name.
+    #[must_use]
+    pub fn duplicate_top(span: Span, name: &str) -> Self {
+        Self::error(span, format!("`{name}` is defined more than once"))
+            .with_help("models, enums and types share one set of names")
+    }
+
+    /// Two fields with one name.
+    #[must_use]
+    pub fn duplicate_field(span: Span, field: &str, model: &str) -> Self {
+        Self::error(span, format!("`{model}` has two fields named `{field}`"))
+    }
+
+    /// Two enum values with one name.
+    #[must_use]
+    pub fn duplicate_enum_value(span: Span, value: &str, name: &str) -> Self {
+        Self::error(
+            span,
+            format!("the enum `{name}` has the value `{value}` twice"),
+        )
+    }
+
+    /// An enum with no values.
+    #[must_use]
+    pub fn empty_enum(span: Span, name: &str) -> Self {
+        Self::error(span, format!("the enum `{name}` has no values"))
+    }
+
+    /// A field type that is not a scalar, model, enum or type.
+    #[must_use]
+    pub fn unknown_type(span: Span, name: &str, did_you_mean: Option<&str>) -> Self {
+        let d = Self::error(span, format!("unknown type `{name}`"));
+        match did_you_mean {
+            Some(other) => d.with_help(format!("did you mean `{other}`?")),
+            None => d.with_help(
+                "use a built-in type (String, Int, BigInt, Float, Decimal, Boolean, DateTime, Json, Bytes), or a model, enum or type from this file",
+            ),
+        }
+    }
+
+    /// A provider lumen does not support yet.
+    #[must_use]
+    pub fn unsupported_provider(span: Span, provider: &str) -> Self {
+        Self::error(
+            span,
+            format!("lumen does not support the `{provider}` provider yet"),
+        )
+        .with_help("lumen 0.1 supports \"postgresql\" and \"mongodb\"")
+    }
+
+    /// A datasource without `provider`.
+    #[must_use]
+    pub fn missing_provider(span: Span, name: &str) -> Self {
+        Self::error(span, format!("the datasource `{name}` has no provider"))
+            .with_help("add `provider = \"postgresql\"` or `provider = \"mongodb\"`")
+    }
+
+    /// More than one datasource.
+    #[must_use]
+    pub fn second_datasource(span: Span) -> Self {
+        Self::error(span, "a schema has one datasource; remove this one")
+    }
+
+    /// An attribute that does not exist where it is used.
+    #[must_use]
+    pub fn unknown_attribute(span: Span, name: &str, did_you_mean: Option<&str>) -> Self {
+        let d = Self::error(span, format!("unknown attribute `{name}`"));
+        match did_you_mean {
+            Some(other) => d.with_help(format!("did you mean `{other}`?")),
+            None => d,
+        }
+    }
+
+    /// The same attribute twice on one item.
+    #[must_use]
+    pub fn duplicate_attribute(span: Span, name: &str) -> Self {
+        Self::error(span, format!("`{name}` is used more than once here"))
+    }
+
+    /// An attribute used wrongly; the message says how.
+    #[must_use]
+    pub fn invalid_attribute(span: Span, name: &str, message: impl std::fmt::Display) -> Self {
+        Self::error(span, format!("`{name}`: {message}"))
+    }
+
+    /// Like [`Diagnostic::invalid_attribute`], with a hint.
+    #[must_use]
+    pub fn invalid_attribute_help(
+        span: Span,
+        name: &str,
+        message: impl std::fmt::Display,
+        help: impl Into<String>,
+    ) -> Self {
+        Self::invalid_attribute(span, name, message).with_help(help)
+    }
+
+    /// A model without any way to find one row.
+    #[must_use]
+    pub fn no_unique_criteria(span: Span, model: &str) -> Self {
+        Self::error(span, format!("the model `{model}` has no `@id`, `@@id` or unique field"))
+            .with_help("mark a required field with `@id` or `@unique`, or add `@@id([..])` or `@@unique([..])`")
+    }
+
+    /// Two models stored under one table or collection name.
+    #[must_use]
+    pub fn duplicate_table(span: Span, table: &str, other: &str) -> Self {
+        Self::error(span, format!("`{other}` already uses the table `{table}`"))
+            .with_help("give one of them another `@@map(\"..\")`")
+    }
+
+    /// A relation problem; the message says which.
+    #[must_use]
+    pub fn relation(span: Span, message: impl Into<String>) -> Self {
+        Self::error(span, message)
+    }
+
+    /// Like [`Diagnostic::relation`], with a hint.
+    #[must_use]
+    pub fn relation_help(span: Span, message: impl Into<String>, help: impl Into<String>) -> Self {
+        Self::error(span, message).with_help(help)
+    }
+
+    /// A relation field whose other side is missing (SPEC-SCHEMA-001 AC-002).
+    #[must_use]
+    pub fn missing_opposite(span: Span, field: &str, model: &str, target: &str, add: &str) -> Self {
+        Self::error(
+            span,
+            format!(
+                "the relation field `{field}` on `{model}` has no opposite field on `{target}`"
+            ),
+        )
+        .with_help(format!(
+            "add `{add}` to the model `{target}`, or run `lumen format` to add it"
         ))
     }
 }
