@@ -1,20 +1,47 @@
-//! Running statements on Postgres.
+//! Running statements on Postgres, on the pool or inside a transaction.
 
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
-use sqlx::postgres::{PgArguments, PgPool, PgRow};
+use sqlx::postgres::{PgArguments, PgPool, PgRow, Postgres};
 use sqlx::{Arguments, AssertSqlSafe, FromRow};
 
 use crate::error::{Error, Result};
 use crate::query::{Built, Select};
 use crate::value::Value;
 
+/// What every connection shares: constraint names for errors, and a statement counter.
+#[derive(Debug, Default)]
+struct Shared {
+    constraints: HashMap<String, Vec<String>>,
+    statements: AtomicU64,
+}
+
 /// A connection pool and the schema's constraint names (for errors that name fields).
 #[derive(Debug, Clone)]
 pub struct Db {
     pool: PgPool,
-    constraints: Arc<HashMap<String, Vec<String>>>,
+    shared: Arc<Shared>,
+}
+
+/// An open transaction. Statements run on it until it is committed or rolled back; dropping it
+/// rolls back.
+#[derive(Debug)]
+pub struct Tx<'c> {
+    tx: sqlx::Transaction<'c, Postgres>,
+    shared: Arc<Shared>,
+}
+
+/// How strictly a transaction is isolated from others.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Isolation {
+    /// Postgres's default.
+    ReadCommitted,
+    /// One snapshot for the whole transaction.
+    RepeatableRead,
+    /// As if transactions ran one after another; may fail with P2034 and need a retry.
+    Serializable,
 }
 
 fn bind_list(
@@ -87,6 +114,132 @@ fn arguments(params: &[Value]) -> Result<PgArguments> {
     Ok(args)
 }
 
+async fn fetch_all_on<'e, E, T>(e: E, built: Built, shared: &Shared) -> Result<Vec<T>>
+where
+    E: sqlx::Executor<'e, Database = Postgres>,
+    T: for<'r> FromRow<'r, PgRow> + Send + Unpin,
+{
+    shared.statements.fetch_add(1, Ordering::Relaxed);
+    let args = arguments(&built.params)?;
+    // the SQL is made by lumen's renderer (or is the caller's raw SQL); values are parameters
+    sqlx::query_as_with::<_, T, _>(AssertSqlSafe(built.sql), args)
+        .fetch_all(e)
+        .await
+        .map_err(|err| Error::from_sqlx(err, &shared.constraints))
+}
+
+async fn execute_on<'e, E>(e: E, built: Built, shared: &Shared) -> Result<u64>
+where
+    E: sqlx::Executor<'e, Database = Postgres>,
+{
+    shared.statements.fetch_add(1, Ordering::Relaxed);
+    let args = arguments(&built.params)?;
+    sqlx::query_with(AssertSqlSafe(built.sql), args)
+        .execute(e)
+        .await
+        .map(|r| r.rows_affected())
+        .map_err(|err| Error::from_sqlx(err, &shared.constraints))
+}
+
+async fn count_on<'e, E>(e: E, select: &Select, shared: &Shared) -> Result<i64>
+where
+    E: sqlx::Executor<'e, Database = Postgres>,
+{
+    shared.statements.fetch_add(1, Ordering::Relaxed);
+    let built = select.count();
+    let args = arguments(&built.params)?;
+    sqlx::query_scalar_with::<_, i64, _>(AssertSqlSafe(built.sql), args)
+        .fetch_one(e)
+        .await
+        .map_err(|err| Error::from_sqlx(err, &shared.constraints))
+}
+
+/// Something statements run on: the pool (`&Db`) or a transaction (`Tx`). The generated client
+/// is generic over it, so every operation works inside and outside transactions.
+#[allow(
+    async_fn_in_trait,
+    reason = "lumen's own code and the generated client are the callers"
+)]
+pub trait Run {
+    /// Every row, decoded as `T`.
+    ///
+    /// # Errors
+    /// A coded [`Error`].
+    async fn fetch_all<T>(&mut self, built: Built) -> Result<Vec<T>>
+    where
+        T: for<'r> FromRow<'r, PgRow> + Send + Unpin;
+
+    /// Run a statement; the number of rows it touched.
+    ///
+    /// # Errors
+    /// A coded [`Error`].
+    async fn execute(&mut self, built: Built) -> Result<u64>;
+
+    /// How many rows a select matches.
+    ///
+    /// # Errors
+    /// A coded [`Error`].
+    async fn count(&mut self, select: &Select) -> Result<i64>;
+
+    /// The first row, if any.
+    ///
+    /// # Errors
+    /// A coded [`Error`].
+    async fn fetch_optional<T>(&mut self, built: Built) -> Result<Option<T>>
+    where
+        T: for<'r> FromRow<'r, PgRow> + Send + Unpin,
+    {
+        Ok(self.fetch_all(built).await?.into_iter().next())
+    }
+
+    /// Exactly one row.
+    ///
+    /// # Errors
+    /// P2025 when there is none.
+    async fn fetch_one<T>(&mut self, built: Built) -> Result<T>
+    where
+        T: for<'r> FromRow<'r, PgRow> + Send + Unpin,
+    {
+        self.fetch_optional(built)
+            .await?
+            .ok_or_else(|| Error::not_found("record"))
+    }
+}
+
+impl Run for &Db {
+    async fn fetch_all<T>(&mut self, built: Built) -> Result<Vec<T>>
+    where
+        T: for<'r> FromRow<'r, PgRow> + Send + Unpin,
+    {
+        fetch_all_on(&self.pool, built, &self.shared).await
+    }
+
+    async fn execute(&mut self, built: Built) -> Result<u64> {
+        execute_on(&self.pool, built, &self.shared).await
+    }
+
+    async fn count(&mut self, select: &Select) -> Result<i64> {
+        count_on(&self.pool, select, &self.shared).await
+    }
+}
+
+impl Run for Tx<'_> {
+    async fn fetch_all<T>(&mut self, built: Built) -> Result<Vec<T>>
+    where
+        T: for<'r> FromRow<'r, PgRow> + Send + Unpin,
+    {
+        fetch_all_on(&mut *self.tx, built, &self.shared).await
+    }
+
+    async fn execute(&mut self, built: Built) -> Result<u64> {
+        execute_on(&mut *self.tx, built, &self.shared).await
+    }
+
+    async fn count(&mut self, select: &Select) -> Result<i64> {
+        count_on(&mut *self.tx, select, &self.shared).await
+    }
+}
+
 impl Db {
     /// Connect to `url`.
     ///
@@ -104,16 +257,21 @@ impl Db {
     pub fn from_pool(pool: PgPool) -> Self {
         Self {
             pool,
-            constraints: Arc::new(HashMap::new()),
+            shared: Arc::new(Shared::default()),
         }
     }
 
     /// Name the fields behind constraint names, so errors can say `email` instead of
     /// `User_email_key`. The generated client fills this from the schema.
     #[must_use]
-    pub fn with_constraints(mut self, constraints: HashMap<String, Vec<String>>) -> Self {
-        self.constraints = Arc::new(constraints);
-        self
+    pub fn with_constraints(self, constraints: HashMap<String, Vec<String>>) -> Self {
+        Self {
+            pool: self.pool,
+            shared: Arc::new(Shared {
+                constraints,
+                statements: AtomicU64::new(0),
+            }),
+        }
     }
 
     /// The pool, for anything lumen does not cover.
@@ -122,8 +280,10 @@ impl Db {
         &self.pool
     }
 
-    fn err(&self, e: sqlx::Error) -> Error {
-        Error::from_sqlx(e, &self.constraints)
+    /// How many statements this `Db` (and its transactions) has run, for tests and metrics.
+    #[must_use]
+    pub fn statements(&self) -> u64 {
+        self.shared.statements.load(Ordering::Relaxed)
     }
 
     /// Every row, decoded as `T`.
@@ -134,12 +294,7 @@ impl Db {
     where
         T: for<'r> FromRow<'r, PgRow> + Send + Unpin,
     {
-        let args = arguments(&built.params)?;
-        // the SQL is made by lumen's renderer; values are parameters
-        sqlx::query_as_with::<_, T, _>(AssertSqlSafe(built.sql), args)
-            .fetch_all(&self.pool)
-            .await
-            .map_err(|e| self.err(e))
+        fetch_all_on(&self.pool, built, &self.shared).await
     }
 
     /// The first row, if any.
@@ -150,11 +305,7 @@ impl Db {
     where
         T: for<'r> FromRow<'r, PgRow> + Send + Unpin,
     {
-        let args = arguments(&built.params)?;
-        sqlx::query_as_with::<_, T, _>(AssertSqlSafe(built.sql), args)
-            .fetch_optional(&self.pool)
-            .await
-            .map_err(|e| self.err(e))
+        Ok(self.fetch_all(built).await?.into_iter().next())
     }
 
     /// Exactly one row.
@@ -175,12 +326,7 @@ impl Db {
     /// # Errors
     /// A coded [`Error`].
     pub async fn execute(&self, built: Built) -> Result<u64> {
-        let args = arguments(&built.params)?;
-        sqlx::query_with(AssertSqlSafe(built.sql), args)
-            .execute(&self.pool)
-            .await
-            .map(|r| r.rows_affected())
-            .map_err(|e| self.err(e))
+        execute_on(&self.pool, built, &self.shared).await
     }
 
     /// How many rows a select matches.
@@ -188,12 +334,7 @@ impl Db {
     /// # Errors
     /// A coded [`Error`].
     pub async fn count(&self, select: &Select) -> Result<i64> {
-        let built = select.count();
-        let args = arguments(&built.params)?;
-        sqlx::query_scalar_with::<_, i64, _>(AssertSqlSafe(built.sql), args)
-            .fetch_one(&self.pool)
-            .await
-            .map_err(|e| self.err(e))
+        count_on(&self.pool, select, &self.shared).await
     }
 
     /// Hand-written SQL with parameters `$1`, `$2`, ..., decoded as `T`. The SQL is the caller's;
@@ -210,5 +351,118 @@ impl Db {
             params,
         })
         .await
+    }
+
+    /// Start a transaction by hand; prefer [`Db::transaction`].
+    ///
+    /// # Errors
+    /// A coded [`Error`].
+    pub async fn begin(&self) -> Result<Tx<'static>> {
+        let tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| Error::from_sqlx(e, &self.shared.constraints))?;
+        Ok(Tx {
+            tx,
+            shared: Arc::clone(&self.shared),
+        })
+    }
+
+    /// Run `f` in a transaction: committed when it returns `Ok`, rolled back when it returns
+    /// `Err` (or panics).
+    ///
+    /// # Errors
+    /// The error `f` returned, or a coded [`Error`] from beginning or committing.
+    pub async fn transaction<T, F>(&self, f: F) -> Result<T>
+    where
+        F: AsyncFnOnce(&mut Tx<'static>) -> Result<T>,
+    {
+        let mut tx = self.begin().await?;
+        finish(f(&mut tx).await, tx).await
+    }
+
+    /// Like [`Db::transaction`] with an isolation level.
+    ///
+    /// # Errors
+    /// As [`Db::transaction`]; P2034 when a serializable transaction conflicts.
+    pub async fn transaction_with<T, F>(&self, isolation: Isolation, f: F) -> Result<T>
+    where
+        F: AsyncFnOnce(&mut Tx<'static>) -> Result<T>,
+    {
+        let mut tx = self.begin().await?;
+        let level = match isolation {
+            Isolation::ReadCommitted => "READ COMMITTED",
+            Isolation::RepeatableRead => "REPEATABLE READ",
+            Isolation::Serializable => "SERIALIZABLE",
+        };
+        tx.execute(Built {
+            sql: format!("SET TRANSACTION ISOLATION LEVEL {level}"),
+            params: Vec::new(),
+        })
+        .await?;
+        finish(f(&mut tx).await, tx).await
+    }
+}
+
+async fn finish<T>(result: Result<T>, tx: Tx<'_>) -> Result<T> {
+    let shared = Arc::clone(&tx.shared);
+    match result {
+        Ok(v) => {
+            tx.tx
+                .commit()
+                .await
+                .map_err(|e| Error::from_sqlx(e, &shared.constraints))?;
+            Ok(v)
+        }
+        Err(e) => {
+            // a failed rollback leaves the connection to be closed by the pool; the error that
+            // caused it is the one worth reporting
+            let _ = tx.tx.rollback().await;
+            Err(e)
+        }
+    }
+}
+
+impl Tx<'_> {
+    /// A nested transaction (a savepoint): rolling it back keeps what the outer one did.
+    ///
+    /// # Errors
+    /// The error `f` returned, or a coded [`Error`].
+    pub async fn transaction<T, F>(&mut self, f: F) -> Result<T>
+    where
+        F: for<'s> AsyncFnOnce(&mut Tx<'s>) -> Result<T>,
+    {
+        let inner = sqlx::Acquire::begin(&mut *self.tx)
+            .await
+            .map_err(|e| Error::from_sqlx(e, &self.shared.constraints))?;
+        let mut nested = Tx {
+            tx: inner,
+            shared: Arc::clone(&self.shared),
+        };
+        let result = f(&mut nested).await;
+        finish(result, nested).await
+    }
+
+    /// Commit by hand (after [`Db::begin`]).
+    ///
+    /// # Errors
+    /// A coded [`Error`].
+    pub async fn commit(self) -> Result<()> {
+        self.tx
+            .commit()
+            .await
+            .map_err(|e| Error::from_sqlx(e, &self.shared.constraints))
+    }
+
+    /// Roll back by hand.
+    ///
+    /// # Errors
+    /// A coded [`Error`].
+    pub async fn rollback(self) -> Result<()> {
+        self.tx
+            .rollback()
+            .await
+            .map_err(|e| Error::from_sqlx(e, &self.shared.constraints))
     }
 }

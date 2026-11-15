@@ -156,6 +156,7 @@ impl Writer {
                 self.push(")");
             }
             Filter::Column(column, op) => self.op(column, op.clone()),
+            Filter::Tuples(columns, rows) => self.tuples(columns, rows),
         }
     }
 
@@ -175,6 +176,11 @@ impl Writer {
                 let _ = write!(self.sql, " OR {} IS NULL)", ident(column));
             }
             Op::In(values) => self.list(column, values, false),
+            Op::Any(values) => {
+                let _ = write!(self.sql, "{} = ANY(", ident(column));
+                self.param(Value::List(values));
+                self.push(")");
+            }
             Op::NotIn(values) => self.list(column, values, true),
             Op::Lt(v) => self.compare(column, "<", v, Mode::Default),
             Op::Lte(v) => self.compare(column, "<=", v, Mode::Default),
@@ -190,6 +196,25 @@ impl Writer {
                 self.like(column, format!("%{}", escape_like(&t)), mode, false);
             }
         }
+    }
+
+    fn tuples(&mut self, columns: &[String], rows: &[Vec<Value>]) {
+        if rows.is_empty() {
+            self.push("FALSE");
+            return;
+        }
+        let _ = write!(self.sql, "({}) IN (", columns_sql(columns));
+        for (i, row) in rows.iter().enumerate() {
+            self.push(if i == 0 { "(" } else { ", (" });
+            for (j, v) in row.iter().enumerate() {
+                if j > 0 {
+                    self.push(", ");
+                }
+                self.param(v.clone());
+            }
+            self.push(")");
+        }
+        self.push(")");
     }
 
     fn done(self) -> Built {
@@ -236,6 +261,9 @@ pub struct Select {
     pub offset: Option<i64>,
     /// `DISTINCT ON` these columns.
     pub distinct: Vec<String>,
+    /// At most this many rows per value of a column (`take` inside an include), done in SQL with
+    /// `ROW_NUMBER() OVER (PARTITION BY ..)`.
+    pub per_key_limit: Option<(String, i64)>,
 }
 
 impl Select {
@@ -250,6 +278,7 @@ impl Select {
             limit: None,
             offset: None,
             distinct: Vec::new(),
+            per_key_limit: None,
         }
     }
 
@@ -285,6 +314,9 @@ impl Select {
     /// The SQL.
     #[must_use]
     pub fn build(&self) -> Built {
+        if let Some((key, n)) = &self.per_key_limit {
+            return self.build_per_key(key, *n);
+        }
         let mut w = Writer::default();
         w.push("SELECT ");
         if !self.distinct.is_empty() {
@@ -297,6 +329,42 @@ impl Select {
             self.table.sql()
         );
         self.write_tail(&mut w);
+        w.done()
+    }
+
+    /// Rows numbered per key, then the first `n` of each key, in the select's order.
+    fn build_per_key(&self, key: &str, n: i64) -> Built {
+        let mut w = Writer::default();
+        let order = if self.order.is_empty() {
+            String::new()
+        } else {
+            let parts: Vec<String> = self
+                .order
+                .iter()
+                .map(|(c, o)| {
+                    format!(
+                        "{} {}",
+                        ident(c),
+                        if *o == Order::Desc { "DESC" } else { "ASC" }
+                    )
+                })
+                .collect();
+            format!(" ORDER BY {}", parts.join(", "))
+        };
+        let _ = write!(
+            w.sql,
+            "SELECT {} FROM (SELECT *, ROW_NUMBER() OVER (PARTITION BY {}{order}) AS \"__lumen_rn\" FROM {}",
+            columns_sql(&self.columns),
+            ident(key),
+            self.table.sql()
+        );
+        if let Some(f) = &self.filter {
+            w.push(" WHERE ");
+            w.filter(f);
+        }
+        w.push(") AS \"__lumen_t\" WHERE \"__lumen_rn\" <= ");
+        w.param(Value::BigInt(n));
+        w.push(&order);
         w.done()
     }
 
@@ -531,5 +599,35 @@ mod tests {
             returning: vec!["id".into()],
         };
         assert_eq!(delete.build().sql, "DELETE FROM \"User\" RETURNING \"id\"");
+    }
+
+    #[test]
+    fn loading_by_keys() {
+        let mut q = Select::from(Table::new("Post"));
+        q.filter = Some(crate::Filter::Column(
+            "authorId".into(),
+            crate::Op::Any(vec![1.into(), 2.into()]),
+        ));
+        q.order = vec![("id".into(), Order::Desc)];
+        assert_eq!(
+            q.build().sql,
+            "SELECT * FROM \"Post\" WHERE \"authorId\" = ANY($1) ORDER BY \"id\" DESC"
+        );
+        q.per_key_limit = Some(("authorId".into(), 2));
+        assert_eq!(
+            q.build().sql,
+            "SELECT * FROM (SELECT *, ROW_NUMBER() OVER (PARTITION BY \"authorId\" ORDER BY \"id\" DESC) AS \"__lumen_rn\" FROM \"Post\" WHERE \"authorId\" = ANY($1)) AS \"__lumen_t\" WHERE \"__lumen_rn\" <= $2 ORDER BY \"id\" DESC"
+        );
+        q.per_key_limit = None;
+        q.filter = Some(crate::Filter::Tuples(
+            vec!["a".into(), "b".into()],
+            vec![vec![1.into(), 2.into()], vec![3.into(), 4.into()]],
+        ));
+        assert_eq!(q.build().params.len(), 4);
+        assert!(
+            q.build()
+                .sql
+                .contains("(\"a\", \"b\") IN (($1, $2), ($3, $4))")
+        );
     }
 }

@@ -23,10 +23,11 @@
 mod db;
 mod error;
 mod filter;
+pub mod load;
 mod query;
 mod value;
 
-pub use db::Db;
+pub use db::{Db, Isolation, Run, Tx};
 pub use error::{Error, ErrorInfo, Result};
 pub use filter::{Col, Filter, Mode, Op, col};
 pub use query::{Built, Delete, Insert, OnConflict, Order, Select, Table, Update, ident};
