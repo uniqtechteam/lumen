@@ -863,6 +863,12 @@ pub mod user {
             self.take = Some(n);
             self
         }
+        /// Skip the first `n` related records of each record (done in SQL).
+        #[must_use]
+        pub fn skip(mut self, n: i64) -> Self {
+            self.related.offset = Some(n);
+            self
+        }
         /// Run both queries.
         ///
         /// # Errors
@@ -918,7 +924,6 @@ pub mod user {
     pub struct IncludeProfile<R> {
         find: FindMany<R>,
         related: ::lumen_orm::Select,
-        take: Option<i64>,
     }
     impl<R: ::lumen_orm::Run> IncludeProfile<R> {
         /// Only related records matching `f`.
@@ -936,12 +941,6 @@ pub mod user {
         #[must_use]
         pub fn order_by(mut self, order: (String, ::lumen_orm::Order)) -> Self {
             self.related.order.push(order);
-            self
-        }
-        /// At most `n` related records per record (done in SQL).
-        #[must_use]
-        pub fn take(mut self, n: i64) -> Self {
-            self.take = Some(n);
             self
         }
         /// Run both queries.
@@ -980,7 +979,6 @@ pub mod user {
             IncludeProfile {
                 find: self,
                 related: super::profile::select(),
-                take: None,
             }
         }
     }
@@ -1527,7 +1525,6 @@ pub mod profile {
     pub struct IncludeUser<R> {
         find: FindMany<R>,
         related: ::lumen_orm::Select,
-        take: Option<i64>,
     }
     impl<R: ::lumen_orm::Run> IncludeUser<R> {
         /// Only related records matching `f`.
@@ -1545,12 +1542,6 @@ pub mod profile {
         #[must_use]
         pub fn order_by(mut self, order: (String, ::lumen_orm::Order)) -> Self {
             self.related.order.push(order);
-            self
-        }
-        /// At most `n` related records per record (done in SQL).
-        #[must_use]
-        pub fn take(mut self, n: i64) -> Self {
-            self.take = Some(n);
             self
         }
         /// Run both queries.
@@ -1593,7 +1584,6 @@ pub mod profile {
             IncludeUser {
                 find: self,
                 related: super::user::select(),
-                take: None,
             }
         }
     }
@@ -2341,7 +2331,6 @@ pub mod post {
     pub struct IncludeAuthor<R> {
         find: FindMany<R>,
         related: ::lumen_orm::Select,
-        take: Option<i64>,
     }
     impl<R: ::lumen_orm::Run> IncludeAuthor<R> {
         /// Only related records matching `f`.
@@ -2359,12 +2348,6 @@ pub mod post {
         #[must_use]
         pub fn order_by(mut self, order: (String, ::lumen_orm::Order)) -> Self {
             self.related.order.push(order);
-            self
-        }
-        /// At most `n` related records per record (done in SQL).
-        #[must_use]
-        pub fn take(mut self, n: i64) -> Self {
-            self.take = Some(n);
             self
         }
         /// Run both queries.
@@ -2407,7 +2390,6 @@ pub mod post {
             IncludeAuthor {
                 find: self,
                 related: super::user::select(),
-                take: None,
             }
         }
     }

@@ -203,6 +203,26 @@ async fn includes_and_transactions_on_mongo() {
             .collect::<Vec<_>>(),
         ["t2", "t1"]
     );
+    // SPEC-QUERY-001 FR-004: skip and take inside an include page each account's sessions
+    let paged = client
+        .account()
+        .find_many()
+        .order_by(account::email::asc())
+        .include_sessions()
+        .order_by(session::token::desc())
+        .skip(1)
+        .take(1)
+        .exec()
+        .await
+        .unwrap();
+    assert_eq!(
+        paged[0]
+            .sessions
+            .iter()
+            .map(|s| s.token.as_str())
+            .collect::<Vec<_>>(),
+        ["t1"]
+    );
     let sessions = client
         .session()
         .find_many()

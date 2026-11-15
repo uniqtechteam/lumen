@@ -307,6 +307,26 @@ mod live {
         assert_eq!(json["email"], "bo@example.com", "the record is flattened");
         assert_eq!(json["posts"][0]["title"], "three");
 
+        // SPEC-QUERY-001 FR-004: skip and take inside an include page each user's posts
+        let paged = client
+            .user()
+            .find_many()
+            .order_by(user::id::asc())
+            .include_posts()
+            .order_by(post::id::desc())
+            .skip(1)
+            .take(1)
+            .exec()
+            .await
+            .unwrap();
+        assert_eq!(
+            paged
+                .iter()
+                .map(|u| u.posts.iter().map(|p| p.title.as_str()).collect::<Vec<_>>())
+                .collect::<Vec<_>>(),
+            [vec!["one"], vec![]]
+        );
+
         let posts = client
             .post()
             .find_many()

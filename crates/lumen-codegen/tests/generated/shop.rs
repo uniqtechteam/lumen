@@ -720,6 +720,12 @@ pub mod product {
             self.take = Some(n);
             self
         }
+        /// Skip the first `n` related records of each record (done in SQL).
+        #[must_use]
+        pub fn skip(mut self, n: i64) -> Self {
+            self.related.offset = Some(n);
+            self
+        }
         /// Run both queries.
         ///
         /// # Errors
@@ -1189,6 +1195,12 @@ pub mod order {
         #[must_use]
         pub fn take(mut self, n: i64) -> Self {
             self.take = Some(n);
+            self
+        }
+        /// Skip the first `n` related records of each record (done in SQL).
+        #[must_use]
+        pub fn skip(mut self, n: i64) -> Self {
+            self.related.offset = Some(n);
             self
         }
         /// Run both queries.
@@ -1764,7 +1776,6 @@ pub mod order_line {
     pub struct IncludeOrder<R> {
         find: FindMany<R>,
         related: ::lumen_orm::Select,
-        take: Option<i64>,
     }
     impl<R: ::lumen_orm::Run> IncludeOrder<R> {
         /// Only related records matching `f`.
@@ -1782,12 +1793,6 @@ pub mod order_line {
         #[must_use]
         pub fn order_by(mut self, order: (String, ::lumen_orm::Order)) -> Self {
             self.related.order.push(order);
-            self
-        }
-        /// At most `n` related records per record (done in SQL).
-        #[must_use]
-        pub fn take(mut self, n: i64) -> Self {
-            self.take = Some(n);
             self
         }
         /// Run both queries.
@@ -1830,7 +1835,6 @@ pub mod order_line {
             IncludeOrder {
                 find: self,
                 related: super::order::select(),
-                take: None,
             }
         }
     }
@@ -1848,7 +1852,6 @@ pub mod order_line {
     pub struct IncludeProduct<R> {
         find: FindMany<R>,
         related: ::lumen_orm::Select,
-        take: Option<i64>,
     }
     impl<R: ::lumen_orm::Run> IncludeProduct<R> {
         /// Only related records matching `f`.
@@ -1866,12 +1869,6 @@ pub mod order_line {
         #[must_use]
         pub fn order_by(mut self, order: (String, ::lumen_orm::Order)) -> Self {
             self.related.order.push(order);
-            self
-        }
-        /// At most `n` related records per record (done in SQL).
-        #[must_use]
-        pub fn take(mut self, n: i64) -> Self {
-            self.take = Some(n);
             self
         }
         /// Run both queries.
@@ -1914,7 +1911,6 @@ pub mod order_line {
             IncludeProduct {
                 find: self,
                 related: super::product::select(),
-                take: None,
             }
         }
     }
