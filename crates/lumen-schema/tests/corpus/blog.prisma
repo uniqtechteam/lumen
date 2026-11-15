@@ -12,14 +12,14 @@ generator client {
 
 /// Someone who can sign in.
 model User {
-  id        Int       @id @default(autoincrement())
-  email     String    @unique @db.VarChar(320)
+  id        Int      @id @default(autoincrement())
+  email     String   @unique @db.VarChar(320)
   name      String?
-  role      Role      @default(READER)
+  role      Role     @default(READER)
   posts     Post[]
   profile   Profile?
-  createdAt DateTime  @default(now()) @map("created_at")
-  updatedAt DateTime  @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   @@map("users")
 }
@@ -35,17 +35,17 @@ model Profile {
 }
 
 model Post {
-  id        Int      @id @default(autoincrement())
+  id        Int     @id @default(autoincrement())
   title     String
   body      String?
-  published Boolean  @default(false)
-  author    User     @relation(fields: [authorId], references: [id])
+  published Boolean @default(false)
+  author    User    @relation(fields: [authorId], references: [id])
   authorId  Int
   tags      Tag[]
-  views     BigInt   @default(0)
+  views     BigInt  @default(0)
 
-  @@index([authorId, published(sort: Desc)])
   @@unique([authorId, title], name: "one_title_per_author")
+  @@index([authorId, published(sort: Desc)])
 }
 
 model Tag {

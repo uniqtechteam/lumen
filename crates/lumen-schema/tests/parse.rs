@@ -73,7 +73,12 @@ fn fields_types_and_attributes() {
     assert!(matches!(&relation.args[2].value, Expr::Constant(c, _) if c == "Cascade"));
 
     let post = model(&ast, "Post");
-    let Expr::Array(items, _) = &post.attributes[0].args[0].value else {
+    let index = post
+        .attributes
+        .iter()
+        .find(|a| a.name.name == "index")
+        .unwrap();
+    let Expr::Array(items, _) = &index.args[0].value else {
         panic!()
     };
     assert!(
