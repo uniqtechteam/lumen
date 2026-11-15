@@ -233,3 +233,19 @@ async fn ordering_paging_counts_writes_and_unique_errors() {
     assert_eq!(e.code, "P2002");
     db.database().drop().await.unwrap();
 }
+
+#[tokio::test]
+async fn connect_url_uses_the_database_in_the_url() {
+    let bad = MongoDb::connect_url("mongodb://localhost:27017")
+        .await
+        .unwrap_err();
+    assert_eq!(bad.code, "P1013");
+    let Ok(server) = std::env::var("LUMEN_TEST_MONGO_URL") else {
+        eprintln!("skipped: LUMEN_TEST_MONGO_URL is not set");
+        return;
+    };
+    let (base, query) = server.split_once('?').unwrap_or((server.as_str(), ""));
+    let url = format!("{}/lumen_url?{query}", base.trim_end_matches('/'));
+    let db = MongoDb::connect_url(&url).await.unwrap();
+    assert_eq!(db.database().name(), "lumen_url");
+}

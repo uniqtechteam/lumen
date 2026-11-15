@@ -308,6 +308,24 @@ impl MongoDb {
         Ok(Self::new(client.database(database)))
     }
 
+    /// Connect to `url` and use the database it names (`mongodb://host/app` uses `app`). The
+    /// driver connects on first use, so this does not need a running server.
+    ///
+    /// # Errors
+    /// P1013 when the URL is not valid or names no database.
+    pub async fn connect_url(url: &str) -> Result<Self> {
+        let client = mongodb::Client::with_uri_str(url)
+            .await
+            .map_err(|e| Error::new("P1013", format!("the MongoDB url is not valid: {e}")))?;
+        let db = client.default_database().ok_or_else(|| {
+            Error::new(
+                "P1013",
+                "the MongoDB url names no database; add it, for example mongodb://localhost:27017/app",
+            )
+        })?;
+        Ok(Self::new(db))
+    }
+
     /// Use a database handle.
     #[must_use]
     pub fn new(db: mongodb::Database) -> Self {

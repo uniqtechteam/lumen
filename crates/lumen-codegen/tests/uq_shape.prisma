@@ -1,0 +1,23 @@
+// A collection written by another app's generic MongoDB repository (uq-core's MongoRepo): string
+// UUID v7 ids, camelCase fields, BSON dates, the tenant in orgId and soft delete through
+// deletedAt. lumen reads and writes the same documents, so an app can move one collection at a
+// time.
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+model Note {
+  id        String    @id @default(uuid(7)) @map("_id")
+  orgId     String?
+  ownerId   String?
+  title     String
+  body      String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@index([orgId, createdAt])
+  @@map("notes")
+}

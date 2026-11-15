@@ -94,3 +94,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   `migrate resolve`.
 - Release binaries for Linux (x86_64, arm64), macOS (arm64, x86_64) and Windows, attached to each
   `v*` tag with SHA-256 sums.
+- `Error::http_status()` (404 / 409 / 400 / 503 / 500 from the code) and `Error::is_not_found()`,
+  so a web framework maps lumen errors in one line; `MongoDb::connect_url` takes the database
+  from the URL and connects on first use.
+- MongoDB clients fill `@default(uuid())` / `uuid(7)` ids themselves, as Prisma does, so a
+  collection with string UUID ids (for example one written by another app) works as it is.
