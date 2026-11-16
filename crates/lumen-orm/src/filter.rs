@@ -1,6 +1,8 @@
 //! Conditions for `WHERE`, with Prisma's operators: equals, not, in, notIn, lt, lte, gt, gte,
-//! contains, startsWith, endsWith (optionally case-insensitive), null checks, AND, OR, NOT.
+//! contains, startsWith, endsWith (optionally case-insensitive), null checks, AND, OR, NOT, and
+//! the relation filters some, every, none, is and isNot.
 
+use crate::query::Table;
 use crate::value::Value;
 
 /// Case-sensitive (the default) or not.
@@ -57,6 +59,135 @@ pub enum Filter {
     Column(String, Op),
     /// `("a", "b") IN (($1, $2), ..)`: loading by composite keys.
     Tuples(Vec<String>, Vec<Vec<Value>>),
+    /// A condition on related rows: Prisma's `some`, `every`, `none`, `is` and `isNot`.
+    Relation(Quantifier, Box<Related>),
+}
+
+/// How many related rows must match a relation filter.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Quantifier {
+    /// At least one related row matches (`EXISTS`).
+    Some,
+    /// Every related row matches; true when there are none (`NOT EXISTS` of the rest).
+    Every,
+    /// No related row matches (`NOT EXISTS`).
+    None,
+    /// The one related row exists and matches (`EXISTS`).
+    Is,
+    /// There is no related row, or it does not match (`NOT EXISTS`).
+    IsNot,
+}
+
+/// How the related rows link to the filtered ones.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Link {
+    /// `(related column, this column)` pairs that must be equal.
+    Direct(Vec<(String, String)>),
+    /// Many-to-many through a join table.
+    Through {
+        /// The join table.
+        table: Table,
+        /// `(join column, this column)` pairs.
+        this: Vec<(String, String)>,
+        /// `(join column, related column)` pairs.
+        related: Vec<(String, String)>,
+    },
+}
+
+/// The related rows a relation filter looks at: where they are, how they link, which must match.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Related {
+    /// The related table (or collection).
+    pub table: Table,
+    /// How its rows link to the filtered rows.
+    pub link: Link,
+    /// The condition on the related rows, with their own column names.
+    pub filter: Filter,
+}
+
+impl Related {
+    /// Rows of `table` where each `(related column, this column)` pair is equal.
+    #[must_use]
+    pub fn new(table: Table, on: &[(&str, &str)]) -> Self {
+        Self {
+            table,
+            link: Link::Direct(pairs(on)),
+            filter: Filter::And(Vec::new()),
+        }
+    }
+
+    /// Rows of `table` linked through the join table `through`: `this` pairs join columns with this
+    /// table's columns, `related` pairs them with the related table's columns.
+    #[must_use]
+    pub fn through(
+        table: Table,
+        through: Table,
+        this: &[(&str, &str)],
+        related: &[(&str, &str)],
+    ) -> Self {
+        Self {
+            table,
+            link: Link::Through {
+                table: through,
+                this: pairs(this),
+                related: pairs(related),
+            },
+            filter: Filter::And(Vec::new()),
+        }
+    }
+
+    fn quantified(mut self, quantifier: Quantifier, filter: Filter) -> Filter {
+        self.filter = filter;
+        Filter::Relation(quantifier, Box::new(self))
+    }
+
+    /// At least one related row matches `filter`.
+    #[must_use]
+    pub fn some(self, filter: Filter) -> Filter {
+        self.quantified(Quantifier::Some, filter)
+    }
+
+    /// Every related row matches `filter` (true when there are none, as in Prisma).
+    #[must_use]
+    pub fn every(self, filter: Filter) -> Filter {
+        self.quantified(Quantifier::Every, filter)
+    }
+
+    /// No related row matches `filter`.
+    #[must_use]
+    pub fn none(self, filter: Filter) -> Filter {
+        self.quantified(Quantifier::None, filter)
+    }
+
+    /// The related row exists and matches `filter`.
+    #[must_use]
+    pub fn is(self, filter: Filter) -> Filter {
+        self.quantified(Quantifier::Is, filter)
+    }
+
+    /// There is no related row, or it does not match `filter`.
+    #[must_use]
+    pub fn is_not(self, filter: Filter) -> Filter {
+        self.quantified(Quantifier::IsNot, filter)
+    }
+
+    /// There is no related row (Prisma's `is: null`).
+    #[must_use]
+    pub fn is_null(self) -> Filter {
+        self.quantified(Quantifier::None, Filter::And(Vec::new()))
+    }
+
+    /// There is a related row (Prisma's `isNot: null`).
+    #[must_use]
+    pub fn is_not_null(self) -> Filter {
+        self.quantified(Quantifier::Some, Filter::And(Vec::new()))
+    }
+}
+
+fn pairs(on: &[(&str, &str)]) -> Vec<(String, String)> {
+    on.iter()
+        .map(|(a, b)| ((*a).to_owned(), (*b).to_owned()))
+        .collect()
 }
 
 impl Filter {
@@ -169,9 +300,19 @@ impl Col {
         self.op(Op::StartsWith(text.into(), Mode::Default))
     }
 
+    /// Starts with the text, ignoring case.
+    pub fn starts_with_insensitive(&self, text: impl Into<String>) -> Filter {
+        self.op(Op::StartsWith(text.into(), Mode::Insensitive))
+    }
+
     /// Ends with the text.
     pub fn ends_with(&self, text: impl Into<String>) -> Filter {
         self.op(Op::EndsWith(text.into(), Mode::Default))
+    }
+
+    /// Ends with the text, ignoring case.
+    pub fn ends_with_insensitive(&self, text: impl Into<String>) -> Filter {
+        self.op(Op::EndsWith(text.into(), Mode::Insensitive))
     }
 
     /// `IS NULL`.

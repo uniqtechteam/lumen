@@ -510,6 +510,7 @@ pub fn module(schema: &Schema, model_id: ModelId) -> TokenStream {
         .iter()
         .filter(|f| !f.ignored && f.is_scalar_like() && base_type(schema, f).is_some())
         .map(|f| field_module(schema, f));
+    let relations = crate::relation_filter::modules(schema, model_id, true);
     let create = create_input(schema, model);
     let update = update_input(schema, model);
     let unique = unique_where(schema, model);
@@ -530,6 +531,7 @@ pub fn module(schema: &Schema, model_id: ModelId) -> TokenStream {
             }
             #record
             #(#fields)*
+            #(#relations)*
             #create
             #update
             #unique

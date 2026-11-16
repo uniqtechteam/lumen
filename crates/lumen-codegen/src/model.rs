@@ -137,6 +137,10 @@ pub(crate) fn field_module(schema: &Schema, f: &Field) -> TokenStream {
             pub fn starts_with(v: impl Into<String>) -> ::lumen_orm::Filter { ::lumen_orm::col(COLUMN).starts_with(v) }
             /// Ends with the text.
             pub fn ends_with(v: impl Into<String>) -> ::lumen_orm::Filter { ::lumen_orm::col(COLUMN).ends_with(v) }
+            /// Starts with the text, ignoring case.
+            pub fn starts_with_insensitive(v: impl Into<String>) -> ::lumen_orm::Filter { ::lumen_orm::col(COLUMN).starts_with_insensitive(v) }
+            /// Ends with the text, ignoring case.
+            pub fn ends_with_insensitive(v: impl Into<String>) -> ::lumen_orm::Filter { ::lumen_orm::col(COLUMN).ends_with_insensitive(v) }
             /// Equal, ignoring case.
             pub fn equals_insensitive(v: impl Into<String>) -> ::lumen_orm::Filter { ::lumen_orm::col(COLUMN).equals_insensitive(v) }
         });
@@ -770,6 +774,7 @@ pub fn module(schema: &Schema, model_id: ModelId) -> TokenStream {
         .iter()
         .filter(|f| !f.ignored && f.is_scalar_like())
         .map(|f| field_module(schema, f));
+    let relations = crate::relation_filter::modules(schema, model_id, false);
     let create = create_input(schema, model);
     let update = update_input(schema, model);
     let unique = unique_where(schema, model);
@@ -795,6 +800,7 @@ pub fn module(schema: &Schema, model_id: ModelId) -> TokenStream {
             }
             #record
             #(#fields)*
+            #(#relations)*
             #create
             #update
             #unique

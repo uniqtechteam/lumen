@@ -261,3 +261,70 @@ async fn includes_and_transactions_on_mongo() {
     );
     client.db().database().drop().await.unwrap();
 }
+
+/// SPEC-QUERY-001 FR-002 on MongoDB through the generated client.
+#[tokio::test]
+async fn ac_fr_002_relation_filters_on_mongo() {
+    let Some(client) = client().await else { return };
+    let mut ids = Vec::new();
+    for email in ["ana@example.com", "bo@example.com", "cy@example.com"] {
+        ids.push(
+            client
+                .account()
+                .create(new_account(email))
+                .await
+                .unwrap()
+                .id,
+        );
+    }
+    for (who, token) in [(0, "t1"), (0, "x2"), (1, "t3")] {
+        let s = session::Create {
+            id: None,
+            account_id: ids[who],
+            token: token.into(),
+        };
+        client.session().create(s).await.unwrap();
+    }
+    let emails = async |f: lumen_orm::Filter| {
+        let found = client
+            .account()
+            .find_many()
+            .filter(f)
+            .order_by(account::email::asc());
+        let found = found.exec().await.unwrap();
+        found.into_iter().map(|a| a.email).collect::<Vec<_>>()
+    };
+    let t = || session::token::starts_with_insensitive("T");
+    assert_eq!(
+        emails(account::sessions::some(t())).await,
+        ["ana@example.com", "bo@example.com"]
+    );
+    assert_eq!(
+        emails(account::sessions::every(t())).await,
+        ["bo@example.com", "cy@example.com"],
+        "every is true for an account without sessions"
+    );
+    assert_eq!(
+        emails(account::sessions::none(t())).await,
+        ["cy@example.com"]
+    );
+    assert_eq!(
+        emails(account::sessions::some(session::account::is(
+            account::email::ends_with_insensitive("BO@EXAMPLE.COM")
+        )))
+        .await,
+        ["bo@example.com"],
+        "nested"
+    );
+    assert_eq!(
+        client
+            .session()
+            .count(Some(session::account::is_not(account::email::equals(
+                "ana@example.com"
+            ))))
+            .await
+            .unwrap(),
+        1
+    );
+    client.db().database().drop().await.unwrap();
+}

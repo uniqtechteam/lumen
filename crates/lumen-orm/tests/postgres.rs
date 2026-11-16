@@ -1,4 +1,5 @@
-//! SPEC-QUERY-001 FR-001..003, FR-007, FR-008 on a real Postgres: every filter, ordering and
+//! SPEC-QUERY-001 FR-001..003, FR-007, FR-008 on a real Postgres: every filter (relation filters
+//! too), ordering and
 //! paging, inserts with casts, upserts, updates, deletes, counts, raw queries and coded errors.
 //! Runs when `LUMEN_TEST_POSTGRES_URL` is set.
 
@@ -12,7 +13,9 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use lumen_orm::sqlx::{AssertSqlSafe, FromRow, PgPool};
-use lumen_orm::{Db, Delete, Filter, Insert, OnConflict, Order, Select, Table, Update, Value, col};
+use lumen_orm::{
+    Db, Delete, Filter, Insert, OnConflict, Order, Related, Select, Table, Update, Value, col,
+};
 
 const SCHEMA: &str = r#"
 CREATE TYPE "Role" AS ENUM ('READER', 'WRITER', 'ADMIN');
@@ -26,12 +29,14 @@ CREATE TABLE "Item" (
     "data" JSONB,
     "made" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "tags" TEXT[] NOT NULL DEFAULT '{}',
-    "active" BOOLEAN NOT NULL DEFAULT true
+    "active" BOOLEAN NOT NULL DEFAULT true,
+    "parentId" INTEGER REFERENCES "Item"("id")
 );
 CREATE UNIQUE INDEX "Item_name_key" ON "Item"("name");
 CREATE TABLE "Part" (
     "id" SERIAL PRIMARY KEY,
-    "itemId" INTEGER NOT NULL REFERENCES "Item"("id")
+    "itemId" INTEGER NOT NULL REFERENCES "Item"("id"),
+    "name" TEXT
 );
 "#;
 
@@ -143,12 +148,105 @@ async fn ids(db: &Db, filter: Filter) -> Vec<i32> {
         .collect()
 }
 
+/// The relation-filter cases, the same on Postgres and MongoDB. Items have parts (`Part.itemId`)
+/// and an optional parent item (`Item.parentId`): Lamp has a bulb and a cable, the lamp shade has a
+/// bulb and Lamp as parent, Desk has nothing, Chair has a leg and Desk as parent.
+fn relation_cases() -> Vec<(&'static str, Filter, Vec<i32>)> {
+    let parts = || Related::new(Table::new("Part"), &[("itemId", "id")]);
+    let parent = || Related::new(Table::new("Item"), &[("id", "parentId")]);
+    let item = || Related::new(Table::new("Item"), &[("id", "itemId")]);
+    vec![
+        (
+            "starts with, ignoring case",
+            col("name").starts_with_insensitive("LAMP"),
+            vec![1, 2],
+        ),
+        (
+            "ends with, ignoring case",
+            col("name").ends_with_insensitive("SHADE"),
+            vec![2],
+        ),
+        ("some", parts().some(col("name").equals("bulb")), vec![1, 2]),
+        (
+            "some with no condition: has any",
+            parts().some(Filter::And(vec![])),
+            vec![1, 2, 4],
+        ),
+        (
+            "every is true for an item without parts",
+            parts().every(col("name").equals("bulb")),
+            vec![2, 3],
+        ),
+        (
+            "every, ignoring case",
+            parts().every(col("name").starts_with_insensitive("B")),
+            vec![2, 3],
+        ),
+        ("none", parts().none(col("name").equals("bulb")), vec![3, 4]),
+        (
+            "is on an optional to-one",
+            parent().is(col("name").equals("Lamp")),
+            vec![2],
+        ),
+        (
+            "is not keeps items without a parent",
+            parent().is_not(col("name").equals("Lamp")),
+            vec![1, 3, 4],
+        ),
+        ("is null", parent().is_null(), vec![1, 3]),
+        ("is not null", parent().is_not_null(), vec![2, 4]),
+        (
+            "nested: a part whose item's parent is Desk",
+            parts().some(item().is(parent().is(col("name").equals("Desk")))),
+            vec![4],
+        ),
+        (
+            "inside not",
+            !parts().some(col("name").equals("bulb")),
+            vec![3, 4],
+        ),
+        (
+            "inside or and and",
+            parent()
+                .is_null()
+                .and(parts().some(Filter::And(vec![])))
+                .or(col("id").equals(4)),
+            vec![1, 4],
+        ),
+    ]
+}
+
+/// Parts and parents for [`relation_cases`].
+async fn seed_relations(db: &Db) {
+    let parts = Insert {
+        table: Table::new("Part"),
+        columns: vec!["itemId".into(), "name".into()],
+        rows: [(1, "bulb"), (1, "cable"), (2, "bulb"), (4, "leg")]
+            .iter()
+            .map(|(item, n)| vec![(*item).into(), (*n).into()])
+            .collect(),
+        on_conflict: None,
+        returning: vec![],
+    };
+    db.execute(parts.build()).await.unwrap();
+    for (child, parent) in [(2, 1), (4, 3)] {
+        let update = Update {
+            table: Table::new("Item"),
+            set: vec![("parentId".into(), parent.into())],
+            filter: Some(col("id").equals(child)),
+            returning: vec![],
+        };
+        db.execute(update.build()).await.unwrap();
+    }
+}
+
 #[tokio::test]
 async fn ac_002_every_filter_returns_the_right_rows() {
     let Some((admin, db, name)) = db().await else {
         return;
     };
     seed(&db).await;
+    seed_relations(&db).await;
     let cases: Vec<(&str, Filter, Vec<i32>)> = vec![
         ("equals", col("name").equals("Lamp"), vec![1]),
         (
@@ -220,7 +318,7 @@ async fn ac_002_every_filter_returns_the_right_rows() {
         ),
         ("an empty or is false", Filter::Or(vec![]), vec![]),
     ];
-    for (what, filter, want) in cases {
+    for (what, filter, want) in cases.into_iter().chain(relation_cases()) {
         assert_eq!(ids(&db, filter).await, want, "{what}");
     }
     finish(admin, db, name).await;

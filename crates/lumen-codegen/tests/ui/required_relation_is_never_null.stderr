@@ -1,0 +1,19 @@
+error[E0425]: cannot find function `is_null` in module `db::post::author`
+ --> tests/ui/required_relation_is_never_null.rs:8:31
+  |
+8 |     let _ = db::post::author::is_null();
+  |                               ^^^^^^^ not found in `db::post::author`
+  |
+help: consider importing one of these functions
+  |
+1 + use crate::db::post::body::is_null;
+  |
+1 + use crate::db::user::name::is_null;
+  |
+1 + use crate::db::user::profile::is_null;
+  |
+help: if you import `is_null`, refer to it directly
+  |
+8 -     let _ = db::post::author::is_null();
+8 +     let _ = is_null();
+  |

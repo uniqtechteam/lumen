@@ -56,7 +56,7 @@ fn ac_002_a_wrong_value_type_does_not_compile() {
 }
 
 mod live {
-    use super::db::{self, Client, Role, post, profile, user};
+    use super::db::{self, Client, Role, post, profile, tag, user};
     use lumen_orm::sqlx::{AssertSqlSafe, PgPool};
     use lumen_orm::{Run, Set};
 
@@ -384,6 +384,142 @@ mod live {
         let _ = db::Client::new(client.db().clone());
         let mut db_ref = client.db();
         assert_eq!(Run::count(&mut db_ref, &user::select()).await.unwrap(), 2);
+        finish(admin, client, name).await;
+    }
+
+    fn emails(users: &[user::User]) -> Vec<&str> {
+        users.iter().map(|u| u.email.as_str()).collect()
+    }
+
+    /// SPEC-QUERY-001 FR-002: `some`, `every`, `none`, `is`, `is_not`, `is_null` through the
+    /// generated client, on one-to-many, one-to-one and many-to-many relations, nested.
+    #[tokio::test]
+    async fn ac_fr_002_relation_filters_through_the_generated_client() {
+        let Some((admin, client, name)) = client().await else {
+            return;
+        };
+        let mut ids = Vec::new();
+        for email in ["ana@example.com", "bo@example.com", "cy@example.com"] {
+            ids.push(client.user().create(new_user(email)).await.unwrap().id);
+        }
+        let mut posts = Vec::new();
+        for (author, title, published) in [(0, "one", true), (0, "two", false), (1, "three", true)]
+        {
+            let p = post::Create {
+                id: None,
+                title: title.into(),
+                body: None,
+                published: Some(published),
+                author_id: ids[author],
+                views: None,
+            };
+            posts.push(client.post().create(p).await.unwrap().id);
+        }
+        client
+            .profile()
+            .create(profile::Create {
+                id: None,
+                bio: "hi there".into(),
+                user_id: ids[0],
+            })
+            .await
+            .unwrap();
+        let tags = format!(
+            "INSERT INTO \"Tag\" VALUES ('rust'), ('go'); INSERT INTO \"_PostToTag\" VALUES ({}, 'rust'), ({}, 'go'), ({}, 'rust')",
+            posts[0], posts[1], posts[2]
+        );
+        lumen_orm::sqlx::raw_sql(AssertSqlSafe(tags))
+            .execute(client.db().pool())
+            .await
+            .unwrap();
+
+        let users = async |f: lumen_orm::Filter| {
+            let found = client
+                .user()
+                .find_many()
+                .filter(f)
+                .order_by(user::id::asc());
+            found.exec().await.unwrap()
+        };
+        let published = || post::published::equals(true);
+        assert_eq!(
+            emails(&users(user::posts::some(published())).await),
+            ["ana@example.com", "bo@example.com"]
+        );
+        assert_eq!(
+            emails(&users(user::posts::every(published())).await),
+            ["bo@example.com", "cy@example.com"],
+            "every is true for a user without posts"
+        );
+        assert_eq!(
+            emails(&users(user::posts::none(published())).await),
+            ["cy@example.com"]
+        );
+        assert_eq!(
+            emails(
+                &users(user::profile::is(profile::bio::starts_with_insensitive(
+                    "HI"
+                )))
+                .await
+            ),
+            ["ana@example.com"]
+        );
+        assert_eq!(
+            emails(&users(user::profile::is_null()).await),
+            ["bo@example.com", "cy@example.com"]
+        );
+        assert_eq!(
+            emails(&users(user::posts::some(post::tags::some(tag::name::equals("go")))).await),
+            ["ana@example.com"],
+            "nested, through the many-to-many join table"
+        );
+        assert_eq!(
+            emails(&users(!user::profile::is_not_null().or(user::posts::none(published()))).await),
+            ["bo@example.com"],
+            "inside NOT and OR"
+        );
+
+        let titles = async |f: lumen_orm::Filter| {
+            let found = client
+                .post()
+                .find_many()
+                .filter(f)
+                .order_by(post::id::asc());
+            let found = found.exec().await.unwrap();
+            found.into_iter().map(|p| p.title).collect::<Vec<_>>()
+        };
+        assert_eq!(
+            titles(post::author::is(user::email::ends_with_insensitive(
+                "@EXAMPLE.COM"
+            )))
+            .await,
+            ["one", "two", "three"]
+        );
+        assert_eq!(
+            titles(post::author::is_not(user::profile::is_not_null())).await,
+            ["three"]
+        );
+        assert_eq!(
+            titles(post::tags::every(tag::name::equals("rust"))).await,
+            ["one", "three"]
+        );
+        assert_eq!(
+            client
+                .post()
+                .count(Some(post::tags::none(lumen_orm::Filter::And(vec![]))))
+                .await
+                .unwrap(),
+            0
+        );
+        assert_eq!(
+            client
+                .tag()
+                .delete_many(Some(tag::posts::every(post::published::equals(false))))
+                .await
+                .unwrap(),
+            1,
+            "only `go` is on unpublished posts alone"
+        );
         finish(admin, client, name).await;
     }
 }
