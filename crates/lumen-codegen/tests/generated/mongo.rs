@@ -283,6 +283,31 @@ pub mod account {
             related().none(f)
         }
     }
+    /// Conditions on the related `Settings` records of `settings`, built with `settings::..` filters.
+    pub mod settings {
+        fn related() -> ::lumen_orm::Related {
+            ::lumen_orm::Related::new(
+                ::lumen_orm::Table::new("Settings"),
+                &[("accountId", "_id")],
+            )
+        }
+        /// The related record exists and matches `f`.
+        pub fn is(f: ::lumen_orm::Filter) -> ::lumen_orm::Filter {
+            related().is(f)
+        }
+        /// There is no related record, or it does not match `f`.
+        pub fn is_not(f: ::lumen_orm::Filter) -> ::lumen_orm::Filter {
+            related().is_not(f)
+        }
+        /// There is no related record (Prisma's `is: null`).
+        pub fn is_null() -> ::lumen_orm::Filter {
+            related().is_null()
+        }
+        /// There is a related record (Prisma's `isNot: null`).
+        pub fn is_not_null() -> ::lumen_orm::Filter {
+            related().is_not_null()
+        }
+    }
     /// The data for a new document. The id (`auto()`) and fields with defaults are `Option`;
     /// the client fills the defaults, since MongoDB has none.
     #[derive(Debug, Clone, PartialEq)]
@@ -732,6 +757,175 @@ pub mod account {
                 related: super::session::find(),
                 take: None,
             }
+        }
+    }
+    /// A `Account` with its `settings`.
+    #[derive(Debug, Clone, PartialEq, ::lumen_orm::serde::Serialize)]
+    #[serde(crate = "::lumen_orm::serde")]
+    pub struct WithSettings {
+        /// The document.
+        #[serde(flatten)]
+        pub account: Account,
+        /// The related documents.
+        pub settings: Option<super::settings::Settings>,
+    }
+    /// A find-many that also loads one relation (one more query for all the documents).
+    pub struct IncludeSettings<R> {
+        find: FindMany<R>,
+        related: ::lumen_orm::mongo::Find,
+    }
+    impl<R: ::lumen_orm::mongo::MongoRun> IncludeSettings<R> {
+        /// Only related documents matching `f`.
+        #[must_use]
+        pub fn filter(mut self, f: ::lumen_orm::Filter) -> Self {
+            self.related.filter = Some(
+                match self.related.filter.take() {
+                    Some(e) => e.and(f),
+                    None => f,
+                },
+            );
+            self
+        }
+        /// Order the related documents.
+        #[must_use]
+        pub fn order_by(mut self, order: (String, ::lumen_orm::Order)) -> Self {
+            self.related.order.push(order);
+            self
+        }
+        /// Run both queries.
+        ///
+        /// # Errors
+        /// A coded error from the database.
+        pub async fn exec(self) -> ::lumen_orm::Result<Vec<WithSettings>> {
+            let FindMany { mut run, find } = self.find;
+            let parents: Vec<Account> = ::lumen_orm::mongo::MongoRun::find(
+                    &mut run,
+                    &find,
+                )
+                .await?;
+            let related = ::lumen_orm::mongo::load_one(
+                    &mut run,
+                    &parents,
+                    |p| Some(p.id.clone()),
+                    &self.related,
+                    "accountId",
+                    |c: &super::settings::Settings| Some(c.account_id.clone()),
+                )
+                .await?;
+            Ok(
+                parents
+                    .into_iter()
+                    .zip(related)
+                    .map(|(account, settings)| WithSettings { account, settings })
+                    .collect(),
+            )
+        }
+    }
+    impl<R: ::lumen_orm::mongo::MongoRun> FindMany<R> {
+        /// Also load `#field`.
+        #[must_use]
+        pub fn include_settings(self) -> IncludeSettings<R> {
+            IncludeSettings {
+                find: self,
+                related: super::settings::find(),
+            }
+        }
+    }
+    /// Related records written with [`Actions::create_nested`], in the same transaction. Empty
+    /// by default.
+    #[derive(Debug, Clone, Default, PartialEq)]
+    pub struct Nested {
+        /// `sessions`: related records to create or connect.
+        pub sessions: ::lumen_orm::nested::Many<
+            super::session::CreateWithoutAccount,
+            super::session::UniqueWhere,
+        >,
+        /// `settings`: the related record to create or connect.
+        pub settings: Option<
+            ::lumen_orm::nested::One<
+                super::settings::CreateWithoutAccount,
+                super::settings::UniqueWhere,
+            >,
+        >,
+    }
+    async fn write_nested(
+        tx: &mut ::lumen_orm::mongo::MongoTx,
+        data: Create,
+        nested: Nested,
+    ) -> ::lumen_orm::Result<Account> {
+        let record = on(&mut *tx).create(data).await?;
+        let Nested { sessions, settings } = nested;
+        if !sessions.create.is_empty() {
+            let rows = sessions
+                .create
+                .into_iter()
+                .map(|c| c.into_create(record.id.clone()))
+                .collect();
+            super::session::on(&mut *tx).create_many(rows).await?;
+        }
+        for w in sessions.connect {
+            super::session::on(&mut *tx)
+                .update(
+                    w,
+                    super::session::Update {
+                        account_id: ::lumen_orm::Set::To(record.id.clone()),
+                        ..Default::default()
+                    },
+                )
+                .await
+                .map_err(|e| {
+                    if e.is_not_found() {
+                        ::lumen_orm::Error::not_found("Session record to connect")
+                    } else {
+                        e
+                    }
+                })?;
+        }
+        match settings {
+            Some(::lumen_orm::nested::One::Create(c)) => {
+                super::settings::on(&mut *tx)
+                    .create(c.into_create(record.id.clone()))
+                    .await?;
+            }
+            Some(::lumen_orm::nested::One::Connect(w)) => {
+                super::settings::on(&mut *tx)
+                    .update(
+                        w,
+                        super::settings::Update {
+                            account_id: ::lumen_orm::Set::To(record.id.clone()),
+                            ..Default::default()
+                        },
+                    )
+                    .await
+                    .map_err(|e| {
+                        if e.is_not_found() {
+                            ::lumen_orm::Error::not_found("Settings record to connect")
+                        } else {
+                            e
+                        }
+                    })?;
+            }
+            None => {}
+        }
+        Ok(record)
+    }
+    impl<R: ::lumen_orm::mongo::MongoRun + ::lumen_orm::nested::MongoAtomic> Actions<R> {
+        /// Store a new record and create or connect related records, in one transaction:
+        /// when any step fails, nothing is kept.
+        ///
+        /// # Errors
+        /// P2025 when a record to connect does not exist; P2002 when a unique field is taken;
+        /// a coded error otherwise.
+        pub async fn create_nested(
+            mut self,
+            data: Create,
+            nested: Nested,
+        ) -> ::lumen_orm::Result<Account> {
+            ::lumen_orm::nested::MongoAtomic::atomic(
+                    &mut self.run,
+                    async move |tx| write_nested(tx, data, nested).await,
+                )
+                .await
         }
     }
 }
@@ -1376,6 +1570,759 @@ pub mod session {
             }
         }
     }
+    /// `Create` without `accountId`, for a record created through its `account`, which fills the key.
+    #[derive(Debug, Clone, PartialEq)]
+    pub struct CreateWithoutAccount {
+        pub id: Option<::lumen_orm::mongo::ObjectId>,
+        pub token: String,
+    }
+    impl CreateWithoutAccount {
+        /// The full `Create`, with `accountId` set.
+        #[must_use]
+        pub fn into_create(self, account_id: ::lumen_orm::mongo::ObjectId) -> Create {
+            Create {
+                account_id,
+                id: self.id,
+                token: self.token,
+            }
+        }
+    }
+    impl<R: ::lumen_orm::mongo::MongoRun + ::lumen_orm::nested::MongoAtomic> Actions<R> {
+        /// Store a new record under its `account`, which is created or connected first, in one
+        /// transaction: when any step fails, nothing is kept.
+        ///
+        /// # Errors
+        /// P2025 when the record to connect does not exist; P2002 when a unique field is taken;
+        /// a coded error otherwise.
+        pub async fn create_with_account(
+            mut self,
+            data: CreateWithoutAccount,
+            account: ::lumen_orm::nested::One<
+                super::account::Create,
+                super::account::UniqueWhere,
+            >,
+        ) -> ::lumen_orm::Result<Session> {
+            ::lumen_orm::nested::MongoAtomic::atomic(
+                    &mut self.run,
+                    async move |tx| {
+                        let key = match account {
+                            ::lumen_orm::nested::One::Create(c) => {
+                                super::account::on(&mut *tx).create(c).await?.id
+                            }
+                            ::lumen_orm::nested::One::Connect(w) => {
+                                super::account::on(&mut *tx)
+                                    .find_unique(w)
+                                    .await?
+                                    .ok_or_else(|| ::lumen_orm::Error::not_found(
+                                        "Account record to connect",
+                                    ))?
+                                    .id
+                            }
+                        };
+                        on(&mut *tx).create(data.into_create(key)).await
+                    },
+                )
+                .await
+        }
+    }
+}
+/// The `Settings` model (collection `Settings`).
+pub mod settings {
+    /// The collection.
+    pub const COLLECTION: &str = "Settings";
+    /// A find over this model's documents, for dynamic queries.
+    pub fn find() -> ::lumen_orm::mongo::Find {
+        ::lumen_orm::mongo::Find {
+            collection: COLLECTION.to_owned(),
+            ..::lumen_orm::mongo::Find::default()
+        }
+    }
+    /// One per account.
+    #[derive(
+        Debug,
+        Clone,
+        PartialEq,
+        ::lumen_orm::serde::Serialize,
+        ::lumen_orm::serde::Deserialize
+    )]
+    #[serde(crate = "::lumen_orm::serde")]
+    pub struct Settings {
+        #[serde(rename = "_id")]
+        pub id: ::lumen_orm::mongo::ObjectId,
+        #[serde(rename = "accountId")]
+        pub account_id: ::lumen_orm::mongo::ObjectId,
+        #[serde(rename = "theme")]
+        pub theme: String,
+    }
+    /// Conditions and ordering on `id`.
+    pub mod id {
+        /// The column.
+        pub const COLUMN: &str = "_id";
+        /// Equal to `v`.
+        pub fn equals(v: ::lumen_orm::mongo::ObjectId) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).equals(::lumen_orm::Value::from(v))
+        }
+        /// Not equal to `v` (rows where it is NULL match too, as in Prisma).
+        pub fn not(v: ::lumen_orm::mongo::ObjectId) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).not_equals(::lumen_orm::Value::from(v))
+        }
+        /// One of `values`.
+        pub fn is_in(
+            values: impl IntoIterator<Item = ::lumen_orm::mongo::ObjectId>,
+        ) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN)
+                .is_in(values.into_iter().map(::lumen_orm::Value::from))
+        }
+        /// None of `values`.
+        pub fn not_in(
+            values: impl IntoIterator<Item = ::lumen_orm::mongo::ObjectId>,
+        ) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN)
+                .not_in(values.into_iter().map(::lumen_orm::Value::from))
+        }
+        /// Less than `v`.
+        pub fn lt(v: ::lumen_orm::mongo::ObjectId) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).lt(::lumen_orm::Value::from(v))
+        }
+        /// At most `v`.
+        pub fn lte(v: ::lumen_orm::mongo::ObjectId) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).lte(::lumen_orm::Value::from(v))
+        }
+        /// More than `v`.
+        pub fn gt(v: ::lumen_orm::mongo::ObjectId) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).gt(::lumen_orm::Value::from(v))
+        }
+        /// At least `v`.
+        pub fn gte(v: ::lumen_orm::mongo::ObjectId) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).gte(::lumen_orm::Value::from(v))
+        }
+        /// Smallest first.
+        pub fn asc() -> (String, ::lumen_orm::Order) {
+            (COLUMN.to_owned(), ::lumen_orm::Order::Asc)
+        }
+        /// Largest first.
+        pub fn desc() -> (String, ::lumen_orm::Order) {
+            (COLUMN.to_owned(), ::lumen_orm::Order::Desc)
+        }
+    }
+    /// Conditions and ordering on `accountId`.
+    pub mod account_id {
+        /// The column.
+        pub const COLUMN: &str = "accountId";
+        /// Equal to `v`.
+        pub fn equals(v: ::lumen_orm::mongo::ObjectId) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).equals(::lumen_orm::Value::from(v))
+        }
+        /// Not equal to `v` (rows where it is NULL match too, as in Prisma).
+        pub fn not(v: ::lumen_orm::mongo::ObjectId) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).not_equals(::lumen_orm::Value::from(v))
+        }
+        /// One of `values`.
+        pub fn is_in(
+            values: impl IntoIterator<Item = ::lumen_orm::mongo::ObjectId>,
+        ) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN)
+                .is_in(values.into_iter().map(::lumen_orm::Value::from))
+        }
+        /// None of `values`.
+        pub fn not_in(
+            values: impl IntoIterator<Item = ::lumen_orm::mongo::ObjectId>,
+        ) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN)
+                .not_in(values.into_iter().map(::lumen_orm::Value::from))
+        }
+        /// Less than `v`.
+        pub fn lt(v: ::lumen_orm::mongo::ObjectId) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).lt(::lumen_orm::Value::from(v))
+        }
+        /// At most `v`.
+        pub fn lte(v: ::lumen_orm::mongo::ObjectId) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).lte(::lumen_orm::Value::from(v))
+        }
+        /// More than `v`.
+        pub fn gt(v: ::lumen_orm::mongo::ObjectId) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).gt(::lumen_orm::Value::from(v))
+        }
+        /// At least `v`.
+        pub fn gte(v: ::lumen_orm::mongo::ObjectId) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).gte(::lumen_orm::Value::from(v))
+        }
+        /// Smallest first.
+        pub fn asc() -> (String, ::lumen_orm::Order) {
+            (COLUMN.to_owned(), ::lumen_orm::Order::Asc)
+        }
+        /// Largest first.
+        pub fn desc() -> (String, ::lumen_orm::Order) {
+            (COLUMN.to_owned(), ::lumen_orm::Order::Desc)
+        }
+    }
+    /// Conditions and ordering on `theme`.
+    pub mod theme {
+        /// The column.
+        pub const COLUMN: &str = "theme";
+        /// Equal to `v`.
+        pub fn equals(v: impl Into<String>) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).equals(::lumen_orm::Value::from(v.into()))
+        }
+        /// Not equal to `v` (rows where it is NULL match too, as in Prisma).
+        pub fn not(v: impl Into<String>) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).not_equals(::lumen_orm::Value::from(v.into()))
+        }
+        /// One of `values`.
+        pub fn is_in(values: impl IntoIterator<Item = String>) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN)
+                .is_in(values.into_iter().map(::lumen_orm::Value::from))
+        }
+        /// None of `values`.
+        pub fn not_in(values: impl IntoIterator<Item = String>) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN)
+                .not_in(values.into_iter().map(::lumen_orm::Value::from))
+        }
+        /// Less than `v`.
+        pub fn lt(v: impl Into<String>) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).lt(::lumen_orm::Value::from(v.into()))
+        }
+        /// At most `v`.
+        pub fn lte(v: impl Into<String>) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).lte(::lumen_orm::Value::from(v.into()))
+        }
+        /// More than `v`.
+        pub fn gt(v: impl Into<String>) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).gt(::lumen_orm::Value::from(v.into()))
+        }
+        /// At least `v`.
+        pub fn gte(v: impl Into<String>) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).gte(::lumen_orm::Value::from(v.into()))
+        }
+        /// Contains the text.
+        pub fn contains(v: impl Into<String>) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).contains(v)
+        }
+        /// Contains the text, ignoring case.
+        pub fn contains_insensitive(v: impl Into<String>) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).contains_insensitive(v)
+        }
+        /// Starts with the text.
+        pub fn starts_with(v: impl Into<String>) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).starts_with(v)
+        }
+        /// Ends with the text.
+        pub fn ends_with(v: impl Into<String>) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).ends_with(v)
+        }
+        /// Starts with the text, ignoring case.
+        pub fn starts_with_insensitive(v: impl Into<String>) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).starts_with_insensitive(v)
+        }
+        /// Ends with the text, ignoring case.
+        pub fn ends_with_insensitive(v: impl Into<String>) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).ends_with_insensitive(v)
+        }
+        /// Equal, ignoring case.
+        pub fn equals_insensitive(v: impl Into<String>) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).equals_insensitive(v)
+        }
+        /// Smallest first.
+        pub fn asc() -> (String, ::lumen_orm::Order) {
+            (COLUMN.to_owned(), ::lumen_orm::Order::Asc)
+        }
+        /// Largest first.
+        pub fn desc() -> (String, ::lumen_orm::Order) {
+            (COLUMN.to_owned(), ::lumen_orm::Order::Desc)
+        }
+    }
+    /// Conditions on the related `Account` records of `account`, built with `account::..` filters.
+    pub mod account {
+        fn related() -> ::lumen_orm::Related {
+            ::lumen_orm::Related::new(
+                ::lumen_orm::Table::new("Account"),
+                &[("_id", "accountId")],
+            )
+        }
+        /// The related record exists and matches `f`.
+        pub fn is(f: ::lumen_orm::Filter) -> ::lumen_orm::Filter {
+            related().is(f)
+        }
+        /// There is no related record, or it does not match `f`.
+        pub fn is_not(f: ::lumen_orm::Filter) -> ::lumen_orm::Filter {
+            related().is_not(f)
+        }
+    }
+    /// The data for a new document. The id (`auto()`) and fields with defaults are `Option`;
+    /// the client fills the defaults, since MongoDB has none.
+    #[derive(Debug, Clone, PartialEq)]
+    pub struct Create {
+        pub id: Option<::lumen_orm::mongo::ObjectId>,
+        pub account_id: ::lumen_orm::mongo::ObjectId,
+        pub theme: Option<String>,
+    }
+    #[derive(::lumen_orm::serde::Serialize)]
+    #[serde(crate = "::lumen_orm::serde")]
+    struct NewDocument {
+        #[serde(rename = "_id", skip_serializing_if = "Option::is_none")]
+        id: Option<::lumen_orm::mongo::ObjectId>,
+        #[serde(rename = "accountId")]
+        account_id: ::lumen_orm::mongo::ObjectId,
+        #[serde(rename = "theme", skip_serializing_if = "Option::is_none")]
+        theme: Option<String>,
+    }
+    impl Create {
+        fn into_document(self) -> NewDocument {
+            NewDocument {
+                id: self.id,
+                account_id: self.account_id,
+                theme: Some(self.theme.unwrap_or_else(|| "light".to_owned())),
+            }
+        }
+    }
+    /// The fields to change; `Set::NotSet` (the default) leaves a field as it is.
+    #[derive(Debug, Clone, Default, PartialEq)]
+    pub struct Update {
+        pub id: ::lumen_orm::Set<::lumen_orm::mongo::ObjectId>,
+        pub account_id: ::lumen_orm::Set<::lumen_orm::mongo::ObjectId>,
+        pub theme: ::lumen_orm::Set<String>,
+    }
+    impl Update {
+        fn set(self) -> Vec<(String, ::lumen_orm::Value)> {
+            let mut set = Vec::new();
+            if let ::lumen_orm::Set::To(v) = self.id {
+                set.push(("_id".to_owned(), ::lumen_orm::Value::from(v)));
+            }
+            if let ::lumen_orm::Set::To(v) = self.account_id {
+                set.push(("accountId".to_owned(), ::lumen_orm::Value::from(v)));
+            }
+            if let ::lumen_orm::Set::To(v) = self.theme {
+                set.push(("theme".to_owned(), ::lumen_orm::Value::from(v)));
+            }
+            set
+        }
+    }
+    /// One record, by its id or a unique key.
+    #[derive(Debug, Clone, PartialEq)]
+    pub enum UniqueWhere {
+        Id(::lumen_orm::mongo::ObjectId),
+        AccountId(::lumen_orm::mongo::ObjectId),
+    }
+    impl UniqueWhere {
+        fn columns(&self) -> Vec<String> {
+            match self {
+                Self::Id(_) => vec!["_id".to_owned()],
+                Self::AccountId(_) => vec!["accountId".to_owned()],
+            }
+        }
+    }
+    impl From<UniqueWhere> for ::lumen_orm::Filter {
+        fn from(w: UniqueWhere) -> Self {
+            match w {
+                UniqueWhere::Id(v) => {
+                    ::lumen_orm::col("_id").equals(::lumen_orm::Value::from(v))
+                }
+                UniqueWhere::AccountId(v) => {
+                    ::lumen_orm::col("accountId").equals(::lumen_orm::Value::from(v))
+                }
+            }
+        }
+    }
+    fn by_id(r: &Settings) -> ::lumen_orm::Filter {
+        ::lumen_orm::col("_id").equals(::lumen_orm::Value::from(r.id.clone()))
+    }
+    /// The operations on this model, on the database or in a transaction.
+    pub struct Actions<R> {
+        run: R,
+    }
+    /// The operations, on any [`::lumen_orm::mongo::MongoRun`] (for example `&mut tx`).
+    pub fn on<R: ::lumen_orm::mongo::MongoRun>(run: R) -> Actions<R> {
+        Actions { run }
+    }
+    impl<R: ::lumen_orm::mongo::MongoRun> Actions<R> {
+        /// Documents matching the filters you add.
+        #[must_use]
+        pub fn find_many(self) -> FindMany<R> {
+            FindMany {
+                run: self.run,
+                find: find(),
+            }
+        }
+        /// The document with this id or unique key.
+        ///
+        /// # Errors
+        /// A coded error from the database.
+        pub async fn find_unique(
+            mut self,
+            w: UniqueWhere,
+        ) -> ::lumen_orm::Result<Option<Settings>> {
+            let mut f = find();
+            f.filter = Some(w.into());
+            f.limit = Some(1);
+            Ok(
+                ::lumen_orm::mongo::MongoRun::find(&mut self.run, &f)
+                    .await?
+                    .into_iter()
+                    .next(),
+            )
+        }
+        /// The first document matching `filter`.
+        ///
+        /// # Errors
+        /// A coded error from the database.
+        pub async fn find_first(
+            self,
+            filter: ::lumen_orm::Filter,
+        ) -> ::lumen_orm::Result<Option<Settings>> {
+            Ok(self.find_many().filter(filter).take(1).exec().await?.into_iter().next())
+        }
+        /// Store a new document and return it.
+        ///
+        /// # Errors
+        /// P2002 when a unique index is hit; a coded error otherwise.
+        pub async fn create(mut self, data: Create) -> ::lumen_orm::Result<Settings> {
+            let ids = ::lumen_orm::mongo::MongoRun::insert_many(
+                    &mut self.run,
+                    "Settings",
+                    &[data.into_document()],
+                )
+                .await?;
+            let id = ids
+                .first()
+                .map(::lumen_orm::mongo::value_of_bson)
+                .unwrap_or(::lumen_orm::Value::Null);
+            let mut f = find();
+            f.filter = Some(::lumen_orm::col("_id").equals(id));
+            ::lumen_orm::mongo::MongoRun::find(&mut self.run, &f)
+                .await?
+                .into_iter()
+                .next()
+                .ok_or_else(|| ::lumen_orm::Error::not_found("Settings record"))
+        }
+        /// Store many documents; the number stored.
+        ///
+        /// # Errors
+        /// A coded error from the database.
+        pub async fn create_many(
+            mut self,
+            data: Vec<Create>,
+        ) -> ::lumen_orm::Result<u64> {
+            let docs: Vec<NewDocument> = data
+                .into_iter()
+                .map(Create::into_document)
+                .collect();
+            let ids = ::lumen_orm::mongo::MongoRun::insert_many(
+                    &mut self.run,
+                    "Settings",
+                    &docs,
+                )
+                .await?;
+            Ok(ids.len() as u64)
+        }
+        /// Change one document and return it (found first, so a changed unique key is fine).
+        ///
+        /// # Errors
+        /// P2025 when there is no such document; a coded error otherwise.
+        pub async fn update(
+            mut self,
+            w: UniqueWhere,
+            data: Update,
+        ) -> ::lumen_orm::Result<Settings> {
+            let mut f = find();
+            f.filter = Some(w.into());
+            f.limit = Some(1);
+            let Some(current) = ::lumen_orm::mongo::MongoRun::find::<
+                Settings,
+            >(&mut self.run, &f)
+                .await?
+                .into_iter()
+                .next() else {
+                return Err(::lumen_orm::Error::not_found("Settings record"));
+            };
+            let set = data.set();
+            if !set.is_empty() {
+                ::lumen_orm::mongo::MongoRun::update_many(
+                        &mut self.run,
+                        "Settings",
+                        Some(&by_id(&current)),
+                        set,
+                    )
+                    .await?;
+            }
+            let mut again = find();
+            again.filter = Some(by_id(&current));
+            ::lumen_orm::mongo::MongoRun::find(&mut self.run, &again)
+                .await?
+                .into_iter()
+                .next()
+                .ok_or_else(|| ::lumen_orm::Error::not_found("Settings record"))
+        }
+        /// Change every document matching `filter`; how many matched.
+        ///
+        /// # Errors
+        /// A coded error from the database.
+        pub async fn update_many(
+            mut self,
+            filter: ::lumen_orm::Filter,
+            data: Update,
+        ) -> ::lumen_orm::Result<u64> {
+            let set = data.set();
+            if set.is_empty() {
+                return Ok(0);
+            }
+            ::lumen_orm::mongo::MongoRun::update_many(
+                    &mut self.run,
+                    "Settings",
+                    Some(&filter),
+                    set,
+                )
+                .await
+        }
+        /// Change the document, or create it when it does not exist. Run it in a transaction
+        /// when two writers may race.
+        ///
+        /// # Errors
+        /// A coded error from the database.
+        pub async fn upsert(
+            mut self,
+            w: UniqueWhere,
+            create: Create,
+            update: Update,
+        ) -> ::lumen_orm::Result<Settings> {
+            let mut f = find();
+            f.filter = Some(w.clone().into());
+            f.limit = Some(1);
+            let exists = !::lumen_orm::mongo::MongoRun::find::<
+                Settings,
+            >(&mut self.run, &f)
+                .await?
+                .is_empty();
+            if exists { self.update(w, update).await } else { self.create(create).await }
+        }
+        /// Remove one document and return it.
+        ///
+        /// # Errors
+        /// P2025 when there is no such document; a coded error otherwise.
+        pub async fn delete(mut self, w: UniqueWhere) -> ::lumen_orm::Result<Settings> {
+            let mut f = find();
+            f.filter = Some(w.into());
+            f.limit = Some(1);
+            let Some(current) = ::lumen_orm::mongo::MongoRun::find::<
+                Settings,
+            >(&mut self.run, &f)
+                .await?
+                .into_iter()
+                .next() else {
+                return Err(::lumen_orm::Error::not_found("Settings record"));
+            };
+            ::lumen_orm::mongo::MongoRun::delete_many(
+                    &mut self.run,
+                    "Settings",
+                    Some(&by_id(&current)),
+                )
+                .await?;
+            Ok(current)
+        }
+        /// Remove every document matching `filter` (all of them for `None`); how many.
+        ///
+        /// # Errors
+        /// A coded error from the database.
+        pub async fn delete_many(
+            mut self,
+            filter: Option<::lumen_orm::Filter>,
+        ) -> ::lumen_orm::Result<u64> {
+            ::lumen_orm::mongo::MongoRun::delete_many(
+                    &mut self.run,
+                    "Settings",
+                    filter.as_ref(),
+                )
+                .await
+        }
+        /// How many documents match `filter` (all of them for `None`).
+        ///
+        /// # Errors
+        /// A coded error from the database.
+        pub async fn count(
+            mut self,
+            filter: Option<::lumen_orm::Filter>,
+        ) -> ::lumen_orm::Result<u64> {
+            ::lumen_orm::mongo::MongoRun::count(
+                    &mut self.run,
+                    "Settings",
+                    filter.as_ref(),
+                )
+                .await
+        }
+    }
+    /// Documents matching the filters added, in the order asked for.
+    pub struct FindMany<R> {
+        run: R,
+        find: ::lumen_orm::mongo::Find,
+    }
+    impl<R: ::lumen_orm::mongo::MongoRun> FindMany<R> {
+        /// Only documents matching `f` (combined with earlier filters by AND).
+        #[must_use]
+        pub fn filter(mut self, f: ::lumen_orm::Filter) -> Self {
+            self.find.filter = Some(
+                match self.find.filter.take() {
+                    Some(e) => e.and(f),
+                    None => f,
+                },
+            );
+            self
+        }
+        /// Order by a field, for example `account::created_at::desc()`.
+        #[must_use]
+        pub fn order_by(mut self, order: (String, ::lumen_orm::Order)) -> Self {
+            self.find.order.push(order);
+            self
+        }
+        /// At most `n` documents.
+        #[must_use]
+        pub fn take(mut self, n: i64) -> Self {
+            self.find.limit = Some(n);
+            self
+        }
+        /// Skip the first `n` documents.
+        #[must_use]
+        pub fn skip(mut self, n: u64) -> Self {
+            self.find.skip = Some(n);
+            self
+        }
+        /// Run the query.
+        ///
+        /// # Errors
+        /// A coded error from the database.
+        pub async fn exec(mut self) -> ::lumen_orm::Result<Vec<Settings>> {
+            ::lumen_orm::mongo::MongoRun::find(&mut self.run, &self.find).await
+        }
+    }
+    /// A `Settings` with its `account`.
+    #[derive(Debug, Clone, PartialEq, ::lumen_orm::serde::Serialize)]
+    #[serde(crate = "::lumen_orm::serde")]
+    pub struct WithAccount {
+        /// The document.
+        #[serde(flatten)]
+        pub settings: Settings,
+        /// The related documents.
+        pub account: super::account::Account,
+    }
+    /// A find-many that also loads one relation (one more query for all the documents).
+    pub struct IncludeAccount<R> {
+        find: FindMany<R>,
+        related: ::lumen_orm::mongo::Find,
+    }
+    impl<R: ::lumen_orm::mongo::MongoRun> IncludeAccount<R> {
+        /// Only related documents matching `f`.
+        #[must_use]
+        pub fn filter(mut self, f: ::lumen_orm::Filter) -> Self {
+            self.related.filter = Some(
+                match self.related.filter.take() {
+                    Some(e) => e.and(f),
+                    None => f,
+                },
+            );
+            self
+        }
+        /// Order the related documents.
+        #[must_use]
+        pub fn order_by(mut self, order: (String, ::lumen_orm::Order)) -> Self {
+            self.related.order.push(order);
+            self
+        }
+        /// Run both queries.
+        ///
+        /// # Errors
+        /// A coded error from the database.
+        pub async fn exec(self) -> ::lumen_orm::Result<Vec<WithAccount>> {
+            let FindMany { mut run, find } = self.find;
+            let parents: Vec<Settings> = ::lumen_orm::mongo::MongoRun::find(
+                    &mut run,
+                    &find,
+                )
+                .await?;
+            let related = ::lumen_orm::mongo::load_one(
+                    &mut run,
+                    &parents,
+                    |p| Some(p.account_id.clone()),
+                    &self.related,
+                    "_id",
+                    |c: &super::account::Account| Some(c.id.clone()),
+                )
+                .await?;
+            parents
+                .into_iter()
+                .zip(related)
+                .map(|(settings, account)| {
+                    let account = account
+                        .ok_or_else(|| ::lumen_orm::Error::not_found(
+                            "Account related to a Settings",
+                        ))?;
+                    Ok(WithAccount { settings, account })
+                })
+                .collect()
+        }
+    }
+    impl<R: ::lumen_orm::mongo::MongoRun> FindMany<R> {
+        /// Also load `#field`.
+        #[must_use]
+        pub fn include_account(self) -> IncludeAccount<R> {
+            IncludeAccount {
+                find: self,
+                related: super::account::find(),
+            }
+        }
+    }
+    /// `Create` without `accountId`, for a record created through its `account`, which fills the key.
+    #[derive(Debug, Clone, PartialEq)]
+    pub struct CreateWithoutAccount {
+        pub id: Option<::lumen_orm::mongo::ObjectId>,
+        pub theme: Option<String>,
+    }
+    impl CreateWithoutAccount {
+        /// The full `Create`, with `accountId` set.
+        #[must_use]
+        pub fn into_create(self, account_id: ::lumen_orm::mongo::ObjectId) -> Create {
+            Create {
+                account_id,
+                id: self.id,
+                theme: self.theme,
+            }
+        }
+    }
+    impl<R: ::lumen_orm::mongo::MongoRun + ::lumen_orm::nested::MongoAtomic> Actions<R> {
+        /// Store a new record under its `account`, which is created or connected first, in one
+        /// transaction: when any step fails, nothing is kept.
+        ///
+        /// # Errors
+        /// P2025 when the record to connect does not exist; P2002 when a unique field is taken;
+        /// a coded error otherwise.
+        pub async fn create_with_account(
+            mut self,
+            data: CreateWithoutAccount,
+            account: ::lumen_orm::nested::One<
+                super::account::Create,
+                super::account::UniqueWhere,
+            >,
+        ) -> ::lumen_orm::Result<Settings> {
+            ::lumen_orm::nested::MongoAtomic::atomic(
+                    &mut self.run,
+                    async move |tx| {
+                        let key = match account {
+                            ::lumen_orm::nested::One::Create(c) => {
+                                super::account::on(&mut *tx).create(c).await?.id
+                            }
+                            ::lumen_orm::nested::One::Connect(w) => {
+                                super::account::on(&mut *tx)
+                                    .find_unique(w)
+                                    .await?
+                                    .ok_or_else(|| ::lumen_orm::Error::not_found(
+                                        "Account record to connect",
+                                    ))?
+                                    .id
+                            }
+                        };
+                        on(&mut *tx).create(data.into_create(key)).await
+                    },
+                )
+                .await
+        }
+    }
 }
 /// The client: one accessor per model.
 #[derive(Debug, Clone)]
@@ -1409,5 +2356,10 @@ impl Client {
     #[must_use]
     pub fn session(&self) -> session::Actions<&::lumen_orm::mongo::MongoDb> {
         session::on(&self.db)
+    }
+    /// Operations on `Settings`.
+    #[must_use]
+    pub fn settings(&self) -> settings::Actions<&::lumen_orm::mongo::MongoDb> {
+        settings::on(&self.db)
     }
 }

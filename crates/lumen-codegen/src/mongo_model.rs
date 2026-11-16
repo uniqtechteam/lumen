@@ -129,6 +129,25 @@ fn is_string(f: &Field) -> bool {
         && f.native_type.as_ref().is_none_or(|n| n.name != "ObjectId")
 }
 
+/// The fields of `Create` with their types there: the id and fields the client fills are
+/// `Option`.
+fn create_fields<'a>(schema: &'a Schema, model: &'a Model) -> Vec<(&'a Field, TokenStream)> {
+    let mut out = Vec::new();
+    for f in model.fields.iter().filter(|f| !f.ignored) {
+        let Some(ty) = field_type(schema, f) else {
+            continue;
+        };
+        let auto = matches!(f.default, Some(DefaultValue::Auto));
+        let required = f.arity == Arity::Required && !auto && filled(schema, f).is_none();
+        if required || f.arity == Arity::Optional {
+            out.push((f, ty));
+        } else {
+            out.push((f, quote!(Option<#ty>)));
+        }
+    }
+    out
+}
+
 fn create_input(schema: &Schema, model: &Model) -> TokenStream {
     let mut user = Vec::new();
     let mut stored = Vec::new();
@@ -519,6 +538,7 @@ pub fn module(schema: &Schema, model_id: ModelId) -> TokenStream {
         .iter()
         .map(|i| include_code(schema, model, i))
         .collect::<Vec<_>>();
+    let nested = crate::nested::code(schema, model_id, &create_fields(schema, model), true);
     let module_doc = format!(" The `{}` model (collection `{collection}`).", model.name);
     quote! {
         #[doc = #module_doc]
@@ -537,6 +557,7 @@ pub fn module(schema: &Schema, model_id: ModelId) -> TokenStream {
             #unique
             #actions
             #(#includes)*
+            #nested
         }
     }
 }

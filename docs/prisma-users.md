@@ -32,6 +32,8 @@ field `createdAt` is `user::created_at`.
 | `create({ data })` | `create(user::Create { .. })`; fields with defaults are `Option`, so `None` uses the default |
 | `update({ where, data })` | `update(where, user::Update { name: Set::To(..), ..Default::default() })` |
 | `upsert({ where, create, update })` | `upsert(where, create, update)` |
+| `create({ data: { .., posts: { create: [..], connect: [..] } } })` | `create_nested(user::Create { .. }, user::Nested { posts: Many::create(vec![..]).and_connect(vec![..]), .. })` |
+| `post.create({ data: { .., author: { connect: { email } } } })` | `create_with_author(post::CreateWithoutAuthor { .. }, One::Connect(user::UniqueWhere::Email(..)))` |
 | `delete`, `deleteMany`, `updateMany`, `createMany`, `count` | `delete`, `delete_many`, `update_many`, `create_many`, `count` |
 | `$transaction(async (tx) => ..)` | `client.db().transaction(async \|tx\| { user::on(&mut *tx).create(..).await })` |
 

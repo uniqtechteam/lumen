@@ -1041,6 +1041,103 @@ pub mod user {
             }
         }
     }
+    /// Related records written with [`Actions::create_nested`], in the same transaction. Empty
+    /// by default.
+    #[derive(Debug, Clone, Default, PartialEq)]
+    pub struct Nested {
+        /// `posts`: related records to create or connect.
+        pub posts: ::lumen_orm::nested::Many<
+            super::post::CreateWithoutAuthor,
+            super::post::UniqueWhere,
+        >,
+        /// `profile`: the related record to create or connect.
+        pub profile: Option<
+            ::lumen_orm::nested::One<
+                super::profile::CreateWithoutUser,
+                super::profile::UniqueWhere,
+            >,
+        >,
+    }
+    async fn write_nested(
+        tx: &mut ::lumen_orm::Tx<'_>,
+        data: Create,
+        nested: Nested,
+    ) -> ::lumen_orm::Result<User> {
+        let record = on(&mut *tx).create(data).await?;
+        let Nested { posts, profile } = nested;
+        if !posts.create.is_empty() {
+            let rows = posts
+                .create
+                .into_iter()
+                .map(|c| c.into_create(record.id.clone()))
+                .collect();
+            super::post::on(&mut *tx).create_many(rows).await?;
+        }
+        for w in posts.connect {
+            super::post::on(&mut *tx)
+                .update(
+                    w,
+                    super::post::Update {
+                        author_id: ::lumen_orm::Set::To(record.id.clone()),
+                        ..Default::default()
+                    },
+                )
+                .await
+                .map_err(|e| {
+                    if e.is_not_found() {
+                        ::lumen_orm::Error::not_found("Post record to connect")
+                    } else {
+                        e
+                    }
+                })?;
+        }
+        match profile {
+            Some(::lumen_orm::nested::One::Create(c)) => {
+                super::profile::on(&mut *tx)
+                    .create(c.into_create(record.id.clone()))
+                    .await?;
+            }
+            Some(::lumen_orm::nested::One::Connect(w)) => {
+                super::profile::on(&mut *tx)
+                    .update(
+                        w,
+                        super::profile::Update {
+                            user_id: ::lumen_orm::Set::To(record.id.clone()),
+                            ..Default::default()
+                        },
+                    )
+                    .await
+                    .map_err(|e| {
+                        if e.is_not_found() {
+                            ::lumen_orm::Error::not_found("Profile record to connect")
+                        } else {
+                            e
+                        }
+                    })?;
+            }
+            None => {}
+        }
+        Ok(record)
+    }
+    impl<R: ::lumen_orm::Run + ::lumen_orm::nested::Atomic> Actions<R> {
+        /// Store a new record and create or connect related records, in one transaction:
+        /// when any step fails, nothing is kept.
+        ///
+        /// # Errors
+        /// P2025 when a record to connect does not exist; P2002 when a unique field is taken;
+        /// a coded error otherwise.
+        pub async fn create_nested(
+            mut self,
+            data: Create,
+            nested: Nested,
+        ) -> ::lumen_orm::Result<User> {
+            ::lumen_orm::nested::Atomic::atomic(
+                    &mut self.run,
+                    async move |tx| write_nested(tx, data, nested).await,
+                )
+                .await
+        }
+    }
 }
 /// The `Profile` model (table `Profile`).
 pub mod profile {
@@ -1666,6 +1763,58 @@ pub mod profile {
                 find: self,
                 related: super::user::select(),
             }
+        }
+    }
+    /// `Create` without `userId`, for a record created through its `user`, which fills the key.
+    #[derive(Debug, Clone, PartialEq)]
+    pub struct CreateWithoutUser {
+        pub id: Option<i32>,
+        pub bio: String,
+    }
+    impl CreateWithoutUser {
+        /// The full `Create`, with `userId` set.
+        #[must_use]
+        pub fn into_create(self, user_id: i32) -> Create {
+            Create {
+                user_id,
+                id: self.id,
+                bio: self.bio,
+            }
+        }
+    }
+    impl<R: ::lumen_orm::Run + ::lumen_orm::nested::Atomic> Actions<R> {
+        /// Store a new record under its `user`, which is created or connected first, in one
+        /// transaction: when any step fails, nothing is kept.
+        ///
+        /// # Errors
+        /// P2025 when the record to connect does not exist; P2002 when a unique field is taken;
+        /// a coded error otherwise.
+        pub async fn create_with_user(
+            mut self,
+            data: CreateWithoutUser,
+            user: ::lumen_orm::nested::One<super::user::Create, super::user::UniqueWhere>,
+        ) -> ::lumen_orm::Result<Profile> {
+            ::lumen_orm::nested::Atomic::atomic(
+                    &mut self.run,
+                    async move |tx| {
+                        let key = match user {
+                            ::lumen_orm::nested::One::Create(c) => {
+                                super::user::on(&mut *tx).create(c).await?.id
+                            }
+                            ::lumen_orm::nested::One::Connect(w) => {
+                                super::user::on(&mut *tx)
+                                    .find_unique(w)
+                                    .await?
+                                    .ok_or_else(|| ::lumen_orm::Error::not_found(
+                                        "User record to connect",
+                                    ))?
+                                    .id
+                            }
+                        };
+                        on(&mut *tx).create(data.into_create(key)).await
+                    },
+                )
+                .await
         }
     }
 }
@@ -2528,6 +2677,67 @@ pub mod post {
                 find: self,
                 related: super::user::select(),
             }
+        }
+    }
+    /// `Create` without `authorId`, for a record created through its `author`, which fills the key.
+    #[derive(Debug, Clone, PartialEq)]
+    pub struct CreateWithoutAuthor {
+        pub id: Option<i32>,
+        pub title: String,
+        pub body: Option<String>,
+        pub published: Option<bool>,
+        pub views: Option<i64>,
+    }
+    impl CreateWithoutAuthor {
+        /// The full `Create`, with `authorId` set.
+        #[must_use]
+        pub fn into_create(self, author_id: i32) -> Create {
+            Create {
+                author_id,
+                id: self.id,
+                title: self.title,
+                body: self.body,
+                published: self.published,
+                views: self.views,
+            }
+        }
+    }
+    impl<R: ::lumen_orm::Run + ::lumen_orm::nested::Atomic> Actions<R> {
+        /// Store a new record under its `author`, which is created or connected first, in one
+        /// transaction: when any step fails, nothing is kept.
+        ///
+        /// # Errors
+        /// P2025 when the record to connect does not exist; P2002 when a unique field is taken;
+        /// a coded error otherwise.
+        pub async fn create_with_author(
+            mut self,
+            data: CreateWithoutAuthor,
+            author: ::lumen_orm::nested::One<
+                super::user::Create,
+                super::user::UniqueWhere,
+            >,
+        ) -> ::lumen_orm::Result<Post> {
+            ::lumen_orm::nested::Atomic::atomic(
+                    &mut self.run,
+                    async move |tx| {
+                        let key = match author {
+                            ::lumen_orm::nested::One::Create(c) => {
+                                super::user::on(&mut *tx).create(c).await?.id
+                            }
+                            ::lumen_orm::nested::One::Connect(w) => {
+                                super::user::on(&mut *tx)
+                                    .find_unique(w)
+                                    .await?
+                                    .ok_or_else(|| ::lumen_orm::Error::not_found(
+                                        "User record to connect",
+                                    ))?
+                                    .id
+                            }
+                        };
+                        on(&mut *tx).create(data.into_create(key)).await
+                    },
+                )
+                .await
         }
     }
 }

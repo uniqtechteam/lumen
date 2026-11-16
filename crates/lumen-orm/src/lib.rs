@@ -26,6 +26,7 @@ mod filter;
 pub mod load;
 #[cfg(feature = "mongodb")]
 pub mod mongo;
+pub mod nested;
 mod query;
 mod value;
 

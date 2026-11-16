@@ -9,6 +9,7 @@ model Account {
   address   Address?
   phones    Phone[]
   sessions  Session[]
+  settings  Settings?
   createdAt DateTime  @default(now())
 }
 
@@ -19,6 +20,14 @@ model Session {
   token     String  @unique
 
   @@index([accountId])
+}
+
+/// One per account.
+model Settings {
+  id        String  @id @default(auto()) @map("_id") @db.ObjectId
+  account   Account @relation(fields: [accountId], references: [id])
+  accountId String  @unique @db.ObjectId
+  theme     String  @default("light")
 }
 
 /// Embedded in an account document.

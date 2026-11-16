@@ -223,6 +223,24 @@ pub(crate) fn has_default(f: &Field) -> bool {
         )
 }
 
+/// The fields of `Create` with their types there: fields the database fills are `Option`.
+pub(crate) fn create_fields<'a>(
+    schema: &'a Schema,
+    model: &'a Model,
+) -> Vec<(&'a Field, TokenStream)> {
+    columns(schema, model)
+        .into_iter()
+        .map(|(f, ty)| {
+            let required = f.arity == Arity::Required && !has_default(f);
+            if required || f.arity == Arity::Optional {
+                (f, ty)
+            } else {
+                (f, quote!(Option<#ty>))
+            }
+        })
+        .collect()
+}
+
 pub(crate) fn create_input(schema: &Schema, model: &Model) -> TokenStream {
     let cols = columns(schema, model);
     let fields = cols.iter().map(|(f, ty)| {
@@ -783,6 +801,7 @@ pub fn module(schema: &Schema, model_id: ModelId) -> TokenStream {
         .iter()
         .map(|i| include_code(schema, model, i))
         .collect::<Vec<_>>();
+    let nested = crate::nested::code(schema, model_id, &create_fields(schema, model), false);
     let module_doc = format!(" The `{}` model (table `{table}`).", model.name);
     quote! {
         #[doc = #module_doc]
@@ -806,6 +825,7 @@ pub fn module(schema: &Schema, model_id: ModelId) -> TokenStream {
             #unique
             #actions
             #(#includes)*
+            #nested
         }
     }
 }
