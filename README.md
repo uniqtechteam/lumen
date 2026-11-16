@@ -37,7 +37,7 @@ That is the SQL Prisma writes for the same model, down to the constraint names.
 ## Install
 
 ```bash
-cargo install lumen-cli
+cargo install lumen-db-cli
 ```
 
 Release binaries for Linux, macOS and Windows are attached to each GitHub release. The same program
@@ -122,7 +122,7 @@ flowchart LR
     F --> K[check<br/>counts rows first]
     K --> M[migrations/..._name/<br/>migration.sql]
     M --> H[_prisma_migrations]
-    P --> G[lumen-codegen]
+    P --> G[lumen-db-codegen]
     G --> R[src/db.rs]
     R --> O[lumen-orm<br/>queries, includes, transactions]
     O --> DB
@@ -150,7 +150,7 @@ a hand-written loop:
 | 100 | 2 statements, 0.38 ms | 101 statements, 3.60 ms |
 | 1,000 | 2 statements, 3.24 ms | 1,001 statements, 67.95 ms |
 
-Measured with `cargo run --release -p lumen-codegen --example bench_includes` and drawn with
+Measured with `cargo run --release -p lumen-db-codegen --example bench_includes` and drawn with
 `python3 bench/plot.py`, on an i7-12700 against Postgres 16 in Docker on the same machine (median
 of 21 runs, 2026-11-15). The statement counts are exact. The times move by a few milliseconds
 between runs. Over a real network each statement costs a round trip, so the loop falls further

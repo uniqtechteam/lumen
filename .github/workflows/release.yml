@@ -31,7 +31,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
-      - run: cargo build --release --locked -p lumen-cli --target ${{ matrix.target }}
+      - run: cargo build --release --locked -p lumen-db-cli --target ${{ matrix.target }}
       - name: package
         shell: bash
         run: |

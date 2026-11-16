@@ -1,7 +1,7 @@
 //! How many statements, and how long, loading users with their posts takes: `include_posts()`
 //! against the loop people write by hand (one query per user). Prints JSON for `bench/plot.py`.
 //!
-//! `LUMEN_TEST_POSTGRES_URL=postgres://.. cargo run --release -p lumen-codegen --example bench_includes`
+//! `LUMEN_TEST_POSTGRES_URL=postgres://.. cargo run --release -p lumen-db-codegen --example bench_includes`
 
 #![allow(
     clippy::unwrap_used,

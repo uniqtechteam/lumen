@@ -23,7 +23,7 @@ fn ac_001_every_committed_client_is_current() {
     let (schema, d) = lumen_schema::check(&lumen_schema::SourceFile::new("shop.prisma", text));
     assert!(!d.has_errors());
     assert_eq!(
-        lumen_codegen::generate(&schema, "shop.prisma").unwrap(),
+        lumen_db_codegen::generate(&schema, "shop.prisma").unwrap(),
         include_str!("generated/shop.rs"),
         "tests/generated/shop.rs is out of date: regenerate it with the gen example"
     );
@@ -40,8 +40,8 @@ fn ac_003_the_generated_file_is_current_and_stable() {
     let text = include_str!("blog.prisma");
     let (schema, d) = lumen_schema::check(&lumen_schema::SourceFile::new("blog.prisma", text));
     assert!(!d.has_errors());
-    let once = lumen_codegen::generate(&schema, "blog.prisma").unwrap();
-    let twice = lumen_codegen::generate(&schema, "blog.prisma").unwrap();
+    let once = lumen_db_codegen::generate(&schema, "blog.prisma").unwrap();
+    let twice = lumen_db_codegen::generate(&schema, "blog.prisma").unwrap();
     assert_eq!(once, twice, "generating twice gives the same bytes");
     assert_eq!(
         once,

@@ -5,7 +5,7 @@
 //! use lumen_schema::{SourceFile, check};
 //!
 //! let (schema, _) = check(&SourceFile::new("schema.prisma", "model User {\n  id Int @id\n}\n"));
-//! let code = lumen_codegen::generate(&schema, "schema.prisma").unwrap();
+//! let code = lumen_db_codegen::generate(&schema, "schema.prisma").unwrap();
 //! assert!(code.contains("pub mod user"));
 //! ```
 

@@ -7,7 +7,7 @@ flowchart LR
     F --> K[check<br/>counts rows first]
     K --> M[migrations/..._name/<br/>migration.sql]
     M --> H[_prisma_migrations]
-    P --> G[lumen-codegen]
+    P --> G[lumen-db-codegen]
     G --> R[src/db.rs]
     R --> O[lumen-orm<br/>queries, includes, transactions]
     O --> DB

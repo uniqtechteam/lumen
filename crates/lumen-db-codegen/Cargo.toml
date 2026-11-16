@@ -1,5 +1,5 @@
 [package]
-name = "lumen-codegen"
+name = "lumen-db-codegen"
 description = "Generates lumen's type-safe Rust client from a schema.prisma file."
 version.workspace = true
 edition.workspace = true
