@@ -129,6 +129,11 @@ still `lumen`.
 
 ### Fixed
 
+- `lumen migrate dev` and `migrate reset` create the database when it does not exist yet, as
+  Prisma does, and say so. Before, a new project failed on its first command.
+- A `DATABASE_URL` that is not a `postgresql://` URL gets a clear message naming its scheme (and
+  a reminder that one set in the shell wins over `.env`), instead of "connection refused".
+  Connection errors show the server's message without sqlx's extra detail.
 - MongoDB `db push` no longer drops indexes the schema does not have. It lists them and leaves
   them alone, so an index made by hand survives; it only rebuilds an index the schema names when
   its definition changed. `mongo::push` returns `MongoPush { steps, not_in_schema }`.

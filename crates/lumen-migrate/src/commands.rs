@@ -6,9 +6,10 @@ use std::path::PathBuf;
 
 use lumen_schema::checked::Schema;
 use sqlx::postgres::PgConnection;
-use sqlx::{AssertSqlSafe, Connection, PgPool};
+use sqlx::{AssertSqlSafe, PgPool};
 
 use crate::check::{self, Finding, Severity};
+use crate::database::connect;
 use crate::history::{self, ADVISORY_LOCK_KEY, AppliedMigration, LocalMigration};
 use crate::postgres::render::ident;
 use crate::postgres::{describe, script};
@@ -71,11 +72,7 @@ fn compare(local: &[LocalMigration], applied: &[AppliedMigration]) -> Status {
     s
 }
 
-async fn connect(url: &str) -> Result<PgConnection, MigrateError> {
-    PgConnection::connect(url)
-        .await
-        .map_err(|e| MigrateError::new(format!("cannot connect to the database: {e}")))
-}
+pub use crate::database::ensure_database;
 
 /// Where each migration stands.
 ///
@@ -153,7 +150,7 @@ async fn wipe(conn: &mut PgConnection, schemas: &[String]) -> Result<(), Migrate
 }
 
 /// The URL of `database` on the server of `url`.
-fn with_database(url: &str, database: &str) -> String {
+pub(crate) fn with_database(url: &str, database: &str) -> String {
     let (base, query) = url
         .split_once('?')
         .map_or((url, None), |(b, q)| (b, Some(q)));

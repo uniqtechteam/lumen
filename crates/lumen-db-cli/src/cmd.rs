@@ -261,9 +261,21 @@ pub struct DevArgs {
     pub skip_generate: bool,
 }
 
+/// Create the database on first use, as `prisma migrate dev` does, and say so.
+async fn created_database(project: &Project) -> Result<(), Fail> {
+    if let Some(name) = commands::ensure_database(&project.database_url)
+        .await
+        .map_err(|e| e.message)?
+    {
+        eprintln!("Created the database `{name}`.");
+    }
+    Ok(())
+}
+
 /// `lumen migrate dev`.
 pub async fn migrate_dev(given: Option<&Path>, args: DevArgs) -> Result<ExitCode, Fail> {
     let (path, project) = postgres(given)?;
+    created_database(&project).await?;
     let mut options = DevOptions {
         name: args.name.unwrap_or_else(|| "migration".to_owned()),
         create_only: args.create_only,
@@ -368,6 +380,7 @@ pub async fn migrate_reset(
         eprintln!("Nothing was changed. Pass --force to reset without asking.");
         return Ok(ExitCode::FAILURE);
     }
+    created_database(&project).await?;
     let applied = commands::reset(&project).await.map_err(|e| e.message)?;
     eprintln!("The database was reset.");
     listed("Applied", &applied);
