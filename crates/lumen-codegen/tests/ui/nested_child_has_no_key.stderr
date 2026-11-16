@@ -1,0 +1,7 @@
+error[E0560]: struct `CreateWithoutAuthor` has no field named `author_id`
+  --> tests/ui/nested_child_has_no_key.rs:14:9
+   |
+14 |         author_id: 1,
+   |         ^^^^^^^^^ `CreateWithoutAuthor` does not have this field
+   |
+   = note: all struct fields are already assigned

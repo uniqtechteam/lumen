@@ -468,8 +468,10 @@ async fn users_named(db: &Db, name: &str) -> i64 {
     db.count(&q).await.unwrap()
 }
 
+// AC-003 (a failed nested create leaves no rows) runs through the real API, `create_nested` and
+// `create_with_*`, in lumen-codegen's tests/nested_writes.rs. This is the transaction it relies on.
 #[tokio::test]
-async fn ac_003_a_failed_nested_create_leaves_no_rows() {
+async fn ac_fr_006_a_failed_transaction_leaves_no_rows() {
     let Some((admin, db, name)) = setup().await else {
         return;
     };

@@ -156,6 +156,67 @@ of 21 runs, 2026-11-15). The statement counts are exact. The times move by a few
 between runs. Over a real network each statement costs a round trip, so the loop falls further
 behind.
 
+## Nested writes
+
+`create_nested` stores a record together with related records, in one transaction. Each relation
+takes new records to create and existing ones to connect by a unique key. This makes a user with
+two posts and moves an older post under them:
+
+```rust
+use lumen_orm::nested::{Many, One};
+
+let hello = post::CreateWithoutAuthor {
+    id: None,
+    title: "Hello".into(),
+    body: None,
+    published: None,
+    views: None,
+};
+let ana = client
+    .user()
+    .create_nested(
+        user::Create {
+            id: None,
+            email: "ana@example.com".into(),
+            name: Some("Ana".into()),
+            role: None,
+            created_at: None,
+            updated_at: None,
+        },
+        user::Nested {
+            posts: Many::create(vec![
+                hello.clone(),
+                post::CreateWithoutAuthor { title: "Again".into(), ..hello.clone() },
+            ])
+            .and_connect(vec![post::UniqueWhere::Id(7)]),
+            ..Default::default()
+        },
+    )
+    .await?;
+```
+
+The user is inserted first, then both posts in one statement with `authorId` set, and post 7 is
+moved to Ana. If post 7 does not exist, the call fails with P2025 and none of it is kept. The same
+goes for a duplicate or any other error on the way.
+
+From the side that holds the foreign key, `create_with_<relation>` finds or creates the related
+record first:
+
+```rust
+let post = client
+    .post()
+    .create_with_author(
+        post::CreateWithoutAuthor { title: "Hi".into(), ..hello },
+        One::Connect(user::UniqueWhere::Email("ana@example.com".into())),
+    )
+    .await?;
+```
+
+Inside `transaction(..)` a nested write runs as a savepoint, so if it fails, the work done before
+it is still there. MongoDB runs nested writes in its own transactions, so it needs a replica set.
+MongoDB has no savepoints, so inside a transaction the nested write simply joins it, and returning
+its error rolls back the whole thing.
+
 ## What it does
 
 | | Postgres | MongoDB |
@@ -167,6 +228,7 @@ behind.
 | Generated client: filters, ordering, paging, create, update, upsert, delete, count | yes | yes |
 | Relation filters (`some`, `every`, `none`, `is`, `is_not`) | yes (`EXISTS`) | yes, except many-to-many (one extra statement per relation filter) |
 | Includes, one statement per level | yes | yes (`$in`) |
+| Nested writes: create with nested `create` and `connect` | yes | yes |
 | Transactions | yes, with isolation levels | yes, on a replica set |
 | Errors with Prisma codes (P2002, P2003, P2025, ...) | yes | yes |
 | Query builder for dynamic queries | yes | yes |
@@ -209,6 +271,9 @@ Without a terminal, a command that would lose data stops and asks you to pass
 - No SQLite, MySQL or SQL Server. Postgres and MongoDB only.
 - Not in 0.1: many-to-many includes, nested includes in the generated client (the query builder
   has them), `db pull` for Postgres, `generate --watch`.
+- Nested writes in 0.1 are `create` and `connect` inside a create, on one-to-one and one-to-many
+  relations with a single-column key. `connect_or_create`, `disconnect`, `set` and nested writes
+  inside `update` come later.
 - MongoDB has no migrations, as in Prisma. `db push` creates collections and indexes, rebuilds
   an index whose definition in the schema changed, and never drops a collection. Indexes the
   schema does not have (an `@@index` you removed, or one made by hand) are listed and left in

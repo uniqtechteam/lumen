@@ -11,6 +11,7 @@
 
 mod model;
 mod mongo_model;
+mod nested;
 mod relation_filter;
 mod types;
 

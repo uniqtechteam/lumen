@@ -796,6 +796,70 @@ pub mod product {
             }
         }
     }
+    /// Related records written with [`Actions::create_nested`], in the same transaction. Empty
+    /// by default.
+    #[derive(Debug, Clone, Default, PartialEq)]
+    pub struct Nested {
+        /// `lines`: related records to create or connect.
+        pub lines: ::lumen_orm::nested::Many<
+            super::order_line::CreateWithoutProduct,
+            super::order_line::UniqueWhere,
+        >,
+    }
+    async fn write_nested(
+        tx: &mut ::lumen_orm::Tx<'_>,
+        data: Create,
+        nested: Nested,
+    ) -> ::lumen_orm::Result<Product> {
+        let record = on(&mut *tx).create(data).await?;
+        let Nested { lines } = nested;
+        if !lines.create.is_empty() {
+            let rows = lines
+                .create
+                .into_iter()
+                .map(|c| c.into_create(record.id.clone()))
+                .collect();
+            super::order_line::on(&mut *tx).create_many(rows).await?;
+        }
+        for w in lines.connect {
+            super::order_line::on(&mut *tx)
+                .update(
+                    w,
+                    super::order_line::Update {
+                        product_id: ::lumen_orm::Set::To(record.id.clone()),
+                        ..Default::default()
+                    },
+                )
+                .await
+                .map_err(|e| {
+                    if e.is_not_found() {
+                        ::lumen_orm::Error::not_found("OrderLine record to connect")
+                    } else {
+                        e
+                    }
+                })?;
+        }
+        Ok(record)
+    }
+    impl<R: ::lumen_orm::Run + ::lumen_orm::nested::Atomic> Actions<R> {
+        /// Store a new record and create or connect related records, in one transaction:
+        /// when any step fails, nothing is kept.
+        ///
+        /// # Errors
+        /// P2025 when a record to connect does not exist; P2002 when a unique field is taken;
+        /// a coded error otherwise.
+        pub async fn create_nested(
+            mut self,
+            data: Create,
+            nested: Nested,
+        ) -> ::lumen_orm::Result<Product> {
+            ::lumen_orm::nested::Atomic::atomic(
+                    &mut self.run,
+                    async move |tx| write_nested(tx, data, nested).await,
+                )
+                .await
+        }
+    }
 }
 /// The `Order` model (table `Order`).
 pub mod order {
@@ -1292,6 +1356,70 @@ pub mod order {
                 related: super::order_line::select(),
                 take: None,
             }
+        }
+    }
+    /// Related records written with [`Actions::create_nested`], in the same transaction. Empty
+    /// by default.
+    #[derive(Debug, Clone, Default, PartialEq)]
+    pub struct Nested {
+        /// `lines`: related records to create or connect.
+        pub lines: ::lumen_orm::nested::Many<
+            super::order_line::CreateWithoutOrder,
+            super::order_line::UniqueWhere,
+        >,
+    }
+    async fn write_nested(
+        tx: &mut ::lumen_orm::Tx<'_>,
+        data: Create,
+        nested: Nested,
+    ) -> ::lumen_orm::Result<Order> {
+        let record = on(&mut *tx).create(data).await?;
+        let Nested { lines } = nested;
+        if !lines.create.is_empty() {
+            let rows = lines
+                .create
+                .into_iter()
+                .map(|c| c.into_create(record.id.clone()))
+                .collect();
+            super::order_line::on(&mut *tx).create_many(rows).await?;
+        }
+        for w in lines.connect {
+            super::order_line::on(&mut *tx)
+                .update(
+                    w,
+                    super::order_line::Update {
+                        order_id: ::lumen_orm::Set::To(record.id.clone()),
+                        ..Default::default()
+                    },
+                )
+                .await
+                .map_err(|e| {
+                    if e.is_not_found() {
+                        ::lumen_orm::Error::not_found("OrderLine record to connect")
+                    } else {
+                        e
+                    }
+                })?;
+        }
+        Ok(record)
+    }
+    impl<R: ::lumen_orm::Run + ::lumen_orm::nested::Atomic> Actions<R> {
+        /// Store a new record and create or connect related records, in one transaction:
+        /// when any step fails, nothing is kept.
+        ///
+        /// # Errors
+        /// P2025 when a record to connect does not exist; P2002 when a unique field is taken;
+        /// a coded error otherwise.
+        pub async fn create_nested(
+            mut self,
+            data: Create,
+            nested: Nested,
+        ) -> ::lumen_orm::Result<Order> {
+            ::lumen_orm::nested::Atomic::atomic(
+                    &mut self.run,
+                    async move |tx| write_nested(tx, data, nested).await,
+                )
+                .await
         }
     }
 }
@@ -1993,6 +2121,116 @@ pub mod order_line {
                 find: self,
                 related: super::product::select(),
             }
+        }
+    }
+    /// `Create` without `orderId`, for a record created through its `order`, which fills the key.
+    #[derive(Debug, Clone, PartialEq)]
+    pub struct CreateWithoutOrder {
+        pub product_id: ::lumen_orm::uuid::Uuid,
+        pub quantity: Option<i32>,
+    }
+    impl CreateWithoutOrder {
+        /// The full `Create`, with `orderId` set.
+        #[must_use]
+        pub fn into_create(self, order_id: i32) -> Create {
+            Create {
+                order_id,
+                product_id: self.product_id,
+                quantity: self.quantity,
+            }
+        }
+    }
+    impl<R: ::lumen_orm::Run + ::lumen_orm::nested::Atomic> Actions<R> {
+        /// Store a new record under its `order`, which is created or connected first, in one
+        /// transaction: when any step fails, nothing is kept.
+        ///
+        /// # Errors
+        /// P2025 when the record to connect does not exist; P2002 when a unique field is taken;
+        /// a coded error otherwise.
+        pub async fn create_with_order(
+            mut self,
+            data: CreateWithoutOrder,
+            order: ::lumen_orm::nested::One<
+                super::order::Create,
+                super::order::UniqueWhere,
+            >,
+        ) -> ::lumen_orm::Result<OrderLine> {
+            ::lumen_orm::nested::Atomic::atomic(
+                    &mut self.run,
+                    async move |tx| {
+                        let key = match order {
+                            ::lumen_orm::nested::One::Create(c) => {
+                                super::order::on(&mut *tx).create(c).await?.id
+                            }
+                            ::lumen_orm::nested::One::Connect(w) => {
+                                super::order::on(&mut *tx)
+                                    .find_unique(w)
+                                    .await?
+                                    .ok_or_else(|| ::lumen_orm::Error::not_found(
+                                        "Order record to connect",
+                                    ))?
+                                    .id
+                            }
+                        };
+                        on(&mut *tx).create(data.into_create(key)).await
+                    },
+                )
+                .await
+        }
+    }
+    /// `Create` without `productId`, for a record created through its `product`, which fills the key.
+    #[derive(Debug, Clone, PartialEq)]
+    pub struct CreateWithoutProduct {
+        pub order_id: i32,
+        pub quantity: Option<i32>,
+    }
+    impl CreateWithoutProduct {
+        /// The full `Create`, with `productId` set.
+        #[must_use]
+        pub fn into_create(self, product_id: ::lumen_orm::uuid::Uuid) -> Create {
+            Create {
+                product_id,
+                order_id: self.order_id,
+                quantity: self.quantity,
+            }
+        }
+    }
+    impl<R: ::lumen_orm::Run + ::lumen_orm::nested::Atomic> Actions<R> {
+        /// Store a new record under its `product`, which is created or connected first, in one
+        /// transaction: when any step fails, nothing is kept.
+        ///
+        /// # Errors
+        /// P2025 when the record to connect does not exist; P2002 when a unique field is taken;
+        /// a coded error otherwise.
+        pub async fn create_with_product(
+            mut self,
+            data: CreateWithoutProduct,
+            product: ::lumen_orm::nested::One<
+                super::product::Create,
+                super::product::UniqueWhere,
+            >,
+        ) -> ::lumen_orm::Result<OrderLine> {
+            ::lumen_orm::nested::Atomic::atomic(
+                    &mut self.run,
+                    async move |tx| {
+                        let key = match product {
+                            ::lumen_orm::nested::One::Create(c) => {
+                                super::product::on(&mut *tx).create(c).await?.id
+                            }
+                            ::lumen_orm::nested::One::Connect(w) => {
+                                super::product::on(&mut *tx)
+                                    .find_unique(w)
+                                    .await?
+                                    .ok_or_else(|| ::lumen_orm::Error::not_found(
+                                        "Product record to connect",
+                                    ))?
+                                    .id
+                            }
+                        };
+                        on(&mut *tx).create(data.into_create(key)).await
+                    },
+                )
+                .await
         }
     }
 }
