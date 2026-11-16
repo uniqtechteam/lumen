@@ -313,3 +313,32 @@ async fn ac_fr_005_deploy_applies_pending_migrations_and_records_failures() {
     assert!(again.message.contains("failed earlier"), "{again}");
     s.finish().await;
 }
+
+#[tokio::test]
+async fn dev_creates_a_missing_database_like_prisma() {
+    let Ok(server) = std::env::var("LUMEN_TEST_POSTGRES_URL") else {
+        return;
+    };
+    let admin = PgPool::connect(&server).await.unwrap();
+    let db = format!("lumen_new_{}", std::process::id());
+    let drop = format!("drop database if exists {db}");
+    sqlx::raw_sql(AssertSqlSafe(drop.clone()))
+        .execute(&admin)
+        .await
+        .unwrap();
+    let base = server.rsplit_once('/').map_or(server.as_str(), |(b, _)| b);
+    let url = format!("{base}/{db}");
+
+    let created = commands::ensure_database(&url).await.unwrap();
+    assert_eq!(created.as_deref(), Some(db.as_str()));
+    assert_eq!(commands::ensure_database(&url).await.unwrap(), None);
+
+    let wrong = format!("{base}/{db}").replacen("postgres", "mysql", 1);
+    let e = commands::ensure_database(&wrong).await.unwrap_err();
+    assert!(e.message.contains("must start with postgresql://"), "{e}");
+
+    sqlx::raw_sql(AssertSqlSafe(drop))
+        .execute(&admin)
+        .await
+        .unwrap();
+}

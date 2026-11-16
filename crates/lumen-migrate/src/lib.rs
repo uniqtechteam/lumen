@@ -6,6 +6,7 @@
 mod calculate;
 pub mod check;
 pub mod commands;
+mod database;
 pub mod diff;
 pub mod history;
 pub mod mongo;
