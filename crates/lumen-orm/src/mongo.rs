@@ -262,6 +262,9 @@ fn sort_doc(order: &[(String, Order)]) -> Document {
 /// At most `n` documents per value of `key`, in the find's order, done on the server with
 /// `$setWindowFields` (MongoDB 5+), like `ROW_NUMBER()` on Postgres.
 fn per_key_pipeline(find: &Find, key: &str, n: i64) -> Result<Vec<Document>> {
+    let skip = find
+        .skip
+        .map_or(0, |s| i64::try_from(s).unwrap_or(i64::MAX));
     let filter = find
         .filter
         .as_ref()
@@ -275,7 +278,7 @@ fn per_key_pipeline(find: &Find, key: &str, n: i64) -> Result<Vec<Document>> {
     let mut pipeline = vec![
         doc! { "$match": filter },
         doc! { "$setWindowFields": { "partitionBy": format!("${key}"), "sortBy": sort.clone(), "output": { "__lumen_rn": { "$documentNumber": {} } } } },
-        doc! { "$match": { "__lumen_rn": { "$lte": n } } },
+        doc! { "$match": { "__lumen_rn": { "$gt": skip, "$lte": skip.saturating_add(n) } } },
         doc! { "$unset": "__lumen_rn" },
         doc! { "$sort": sort },
     ];
@@ -376,7 +379,8 @@ impl MongoDb {
         Ok(out)
     }
 
-    /// At most `n` matching documents per value of `key`.
+    /// At most `n` matching documents per value of `key`, after skipping the first `find.skip` of
+    /// each value (`find.limit` is not used: paging is per key).
     ///
     /// # Errors
     /// A coded [`Error`].
@@ -539,7 +543,8 @@ pub trait MongoRun {
     /// # Errors
     /// A coded [`Error`].
     async fn find<T: DeserializeOwned + Send + Sync>(&mut self, find: &Find) -> Result<Vec<T>>;
-    /// At most `n` matching documents per value of `key`.
+    /// At most `n` matching documents per value of `key`, after skipping the first `find.skip` of
+    /// each value (`find.limit` is not used: paging is per key).
     ///
     /// # Errors
     /// A coded [`Error`].
@@ -781,10 +786,11 @@ fn with_filter(find: &Find, extra: Filter) -> Find {
 }
 
 /// The children of each parent, in the parents' order, in one query: `child_field` holds the
-/// parent's key (`$in`). `take` keeps at most that many children per parent, on the server.
+/// parent's key (`$in`). `take` (or else `child.limit`) keeps at most that many children per
+/// parent and `child.skip` skips that many per parent, on the server (`$setWindowFields`).
 ///
 /// # Errors
-/// A coded [`Error`].
+/// P2009 for a negative `take`; a coded [`Error`].
 pub async fn load_many<R, P, C, K>(
     run: &mut R,
     parents: &[P],
@@ -799,6 +805,8 @@ where
     C: DeserializeOwned + Send + Sync,
     K: Eq + std::hash::Hash + Clone + Into<Value>,
 {
+    let take = take.or(child.limit);
+    crate::load::check_paging(take, None)?;
     let mut seen = std::collections::HashSet::new();
     let keys: Vec<K> = parents
         .iter()
@@ -807,16 +815,20 @@ where
         .collect();
     let mut grouped: std::collections::HashMap<K, Vec<C>> = std::collections::HashMap::new();
     if !keys.is_empty() {
-        let find = with_filter(
+        let mut find = with_filter(
             child,
             Filter::Column(
                 child_field.to_owned(),
                 Op::Any(keys.into_iter().map(Into::into).collect()),
             ),
         );
-        let rows: Vec<C> = match take {
-            Some(n) => run.find_per_key(&find, child_field, n).await?,
-            None => run.find(&find).await?,
+        find.limit = None;
+        let rows: Vec<C> = if take.is_some() || find.skip.is_some_and(|s| s > 0) {
+            run.find_per_key(&find, child_field, take.unwrap_or(i64::MAX))
+                .await?
+        } else {
+            find.skip = None;
+            run.find(&find).await?
         };
         for c in rows {
             if let Some(k) = child_key(&c) {
@@ -837,7 +849,7 @@ where
 /// The one related document of each parent (or `None`), in the parents' order, in one query.
 ///
 /// # Errors
-/// A coded [`Error`].
+/// P2009 when `child` has a `limit` or `skip`; a coded [`Error`].
 pub async fn load_one<R, P, C, K>(
     run: &mut R,
     parents: &[P],
@@ -851,6 +863,7 @@ where
     C: DeserializeOwned + Send + Sync + Clone,
     K: Eq + std::hash::Hash + Clone + Into<Value>,
 {
+    crate::load::refuse_paging(child.limit, child.skip.map(|_| 0))?;
     let mut seen = std::collections::HashSet::new();
     let keys: Vec<K> = parents
         .iter()

@@ -60,6 +60,12 @@ impl Error {
         Self::new("P2025", format!("no {what} matches the conditions"))
     }
 
+    /// P2009: a query lumen cannot run as asked, for example paging inside a to-one include.
+    #[must_use]
+    pub fn invalid_query(message: impl Into<String>) -> Self {
+        Self::new("P2009", message)
+    }
+
     /// Whether this is a unique-constraint violation (P2002).
     #[must_use]
     pub fn is_unique_violation(&self) -> bool {
@@ -81,7 +87,7 @@ impl Error {
         match self.code {
             "P2025" => 404,
             "P2002" | "P2003" | "P2034" => 409,
-            "P2000" | "P2011" | "P2023" => 400,
+            "P2000" | "P2009" | "P2011" | "P2023" => 400,
             "P1001" => 503,
             _ => 500,
         }
@@ -174,6 +180,7 @@ mod tests {
         assert_eq!(status("P2002"), 409);
         assert_eq!(status("P2003"), 409);
         assert_eq!(status("P2011"), 400);
+        assert_eq!(status("P2009"), 400);
         assert_eq!(status("P1001"), 503);
         assert_eq!(status("P2010"), 500);
         assert!(Error::not_found("user").is_not_found());

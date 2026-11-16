@@ -261,9 +261,10 @@ pub struct Select {
     pub offset: Option<i64>,
     /// `DISTINCT ON` these columns.
     pub distinct: Vec<String>,
-    /// At most this many rows per value of a column (`take` inside an include), done in SQL with
+    /// Page per key instead of over all rows: when not empty, `limit` and `offset` apply to the
+    /// rows of each value of these columns (`take`/`skip` inside an include), done in SQL with
     /// `ROW_NUMBER() OVER (PARTITION BY ..)`.
-    pub per_key_limit: Option<(String, i64)>,
+    pub per_key: Vec<String>,
 }
 
 impl Select {
@@ -278,7 +279,7 @@ impl Select {
             limit: None,
             offset: None,
             distinct: Vec::new(),
-            per_key_limit: None,
+            per_key: Vec::new(),
         }
     }
 
@@ -314,8 +315,8 @@ impl Select {
     /// The SQL.
     #[must_use]
     pub fn build(&self) -> Built {
-        if let Some((key, n)) = &self.per_key_limit {
-            return self.build_per_key(key, *n);
+        if !self.per_key.is_empty() && (self.limit.is_some() || self.offset.is_some()) {
+            return self.build_per_key();
         }
         let mut w = Writer::default();
         w.push("SELECT ");
@@ -332,8 +333,9 @@ impl Select {
         w.done()
     }
 
-    /// Rows numbered per key, then the first `n` of each key, in the select's order.
-    fn build_per_key(&self, key: &str, n: i64) -> Built {
+    /// Rows numbered per key, then rows `offset + 1 ..= offset + limit` of each key, in the
+    /// select's order.
+    fn build_per_key(&self) -> Built {
         let mut w = Writer::default();
         let order = if self.order.is_empty() {
             String::new()
@@ -355,15 +357,28 @@ impl Select {
             w.sql,
             "SELECT {} FROM (SELECT *, ROW_NUMBER() OVER (PARTITION BY {}{order}) AS \"__lumen_rn\" FROM {}",
             columns_sql(&self.columns),
-            ident(key),
+            columns_sql(&self.per_key),
             self.table.sql()
         );
         if let Some(f) = &self.filter {
             w.push(" WHERE ");
             w.filter(f);
         }
-        w.push(") AS \"__lumen_t\" WHERE \"__lumen_rn\" <= ");
-        w.param(Value::BigInt(n));
+        w.push(") AS \"__lumen_t\" WHERE ");
+        let skip = self.offset.unwrap_or(0);
+        if skip > 0 {
+            w.push("\"__lumen_rn\" > ");
+            w.param(Value::BigInt(skip));
+        }
+        if let Some(n) = self.limit {
+            if skip > 0 {
+                w.push(" AND ");
+            }
+            w.push("\"__lumen_rn\" <= ");
+            w.param(Value::BigInt(skip.saturating_add(n)));
+        } else if skip <= 0 {
+            w.push("TRUE");
+        }
         w.push(&order);
         w.done()
     }
@@ -613,12 +628,26 @@ mod tests {
             q.build().sql,
             "SELECT * FROM \"Post\" WHERE \"authorId\" = ANY($1) ORDER BY \"id\" DESC"
         );
-        q.per_key_limit = Some(("authorId".into(), 2));
+        q.per_key = vec!["authorId".into()];
+        q.limit = Some(2);
         assert_eq!(
             q.build().sql,
             "SELECT * FROM (SELECT *, ROW_NUMBER() OVER (PARTITION BY \"authorId\" ORDER BY \"id\" DESC) AS \"__lumen_rn\" FROM \"Post\" WHERE \"authorId\" = ANY($1)) AS \"__lumen_t\" WHERE \"__lumen_rn\" <= $2 ORDER BY \"id\" DESC"
         );
-        q.per_key_limit = None;
+        q.offset = Some(1);
+        let b = q.build();
+        assert!(
+            b.sql
+                .contains("WHERE \"__lumen_rn\" > $2 AND \"__lumen_rn\" <= $3 ORDER BY"),
+            "{}",
+            b.sql
+        );
+        assert_eq!(b.params[1..], [Value::BigInt(1), Value::BigInt(3)]);
+        q.limit = None;
+        q.per_key = vec!["a".into(), "b".into()];
+        assert!(q.build().sql.contains("PARTITION BY \"a\", \"b\" ORDER BY"));
+        q.per_key = Vec::new();
+        q.offset = None;
         q.filter = Some(crate::Filter::Tuples(
             vec!["a".into(), "b".into()],
             vec![vec![1.into(), 2.into()], vec![3.into(), 4.into()]],

@@ -182,8 +182,10 @@ Without a terminal, a command that would lose data stops and asks you to pass
 - No SQLite, MySQL or SQL Server. Postgres and MongoDB only.
 - Not in 0.1: many-to-many includes, nested includes in the generated client (the query builder
   has them), `db pull` for Postgres, `generate --watch`.
-- MongoDB has no migrations, as in Prisma. `db push` creates collections and indexes and never
-  drops a collection.
+- MongoDB has no migrations, as in Prisma. `db push` creates collections and indexes, rebuilds
+  an index whose definition in the schema changed, and never drops a collection. Indexes the
+  schema does not have (an `@@index` you removed, or one made by hand) are listed and left in
+  place; drop them yourself when they are no longer needed.
 
 ## Contributing
 

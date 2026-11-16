@@ -439,6 +439,51 @@ async fn mongo_database(schema: &Schema, path: &Path) -> Result<mongodb::Databas
     Ok(client.database(&name))
 }
 
+/// What a MongoDB `db push` did, and the indexes it left because the schema does not have them.
+fn print_mongo_push(pushed: &mongo::MongoPush) {
+    if pushed.steps.is_empty() {
+        eprintln!("The database is in sync with the schema.");
+    }
+    for step in &pushed.steps {
+        match step {
+            mongo::MongoStep::CreateCollection(c) => eprintln!("  created collection {c}"),
+            mongo::MongoStep::DropIndex(c, i) => {
+                eprintln!("  dropped index {i} on {c} (its definition changed)");
+            }
+            mongo::MongoStep::CreateIndex(c, i) => eprintln!("  created index {i} on {c}"),
+        }
+    }
+    if pushed.not_in_schema.is_empty() {
+        return;
+    }
+    eprintln!("These indexes are not in the schema; lumen left them as they are:");
+    for e in &pushed.not_in_schema {
+        let keys: Vec<String> = e
+            .index
+            .keys
+            .iter()
+            .map(|(k, dir)| {
+                if *dir < 0 {
+                    format!("{k} desc")
+                } else {
+                    k.clone()
+                }
+            })
+            .collect();
+        let unique = if e.index.unique { ", unique" } else { "" };
+        eprintln!(
+            "  {} on {} ({}{unique})",
+            e.index.name,
+            e.collection,
+            keys.join(", ")
+        );
+    }
+    eprintln!(
+        "Drop one by hand when it is no longer needed, for example in mongosh: db.{}.dropIndex(\"{}\")",
+        pushed.not_in_schema[0].collection, pushed.not_in_schema[0].index.name
+    );
+}
+
 /// `lumen db push`.
 pub async fn db_push(
     given: Option<&Path>,
@@ -449,17 +494,8 @@ pub async fn db_push(
     let (_, schema) = project::load(&path)?;
     if schema.provider() == Provider::MongoDb {
         let db = mongo_database(&schema, &path).await?;
-        let steps = mongo::push(&db, &schema).await.map_err(|e| e.message)?;
-        if steps.is_empty() {
-            eprintln!("The database is in sync with the schema.");
-        }
-        for step in &steps {
-            match step {
-                mongo::MongoStep::CreateCollection(c) => eprintln!("  created collection {c}"),
-                mongo::MongoStep::DropIndex(c, i) => eprintln!("  dropped index {i} on {c}"),
-                mongo::MongoStep::CreateIndex(c, i) => eprintln!("  created index {i} on {c}"),
-            }
-        }
+        let pushed = mongo::push(&db, &schema).await.map_err(|e| e.message)?;
+        print_mongo_push(&pushed);
     } else {
         let (_, project) = postgres(Some(&path))?;
         let mut outcome = commands::push(&project, accept_data_loss)

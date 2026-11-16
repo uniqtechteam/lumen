@@ -162,6 +162,98 @@ async fn a_two_level_include_over_100_parents_runs_3_operations() {
 }
 
 #[tokio::test]
+async fn ac_fr_004_skip_and_take_inside_an_include_page_each_parent_on_the_server() {
+    let Some(db) = setup().await else { return };
+    let mut run = &db;
+    let users: Vec<User> = run.find(&by_id("User")).await.unwrap();
+    let mut page = by_id("Post");
+    page.order = vec![("id".into(), Order::Desc)];
+    page.skip = Some(1);
+    page.limit = Some(1);
+    let before = db.statements();
+    let posts = load_many(
+        &mut run,
+        &users,
+        |u| Some(u.id),
+        &page,
+        "authorId",
+        |p: &Post| Some(p.author_id),
+        None,
+    )
+    .await
+    .unwrap();
+    assert_eq!(db.statements() - before, 1, "one operation for all parents");
+    assert!(
+        posts.iter().all(|p| p.len() == 1 && p[0].title == "post 2"),
+        "the second-newest post of every user, not one post overall"
+    );
+    page.limit = None;
+    page.skip = Some(2);
+    let last = load_many(
+        &mut run,
+        &users,
+        |u| Some(u.id),
+        &page,
+        "authorId",
+        |p: &Post| Some(p.author_id),
+        None,
+    )
+    .await
+    .unwrap();
+    assert!(last.iter().all(|p| p.len() == 1 && p[0].title == "post 1"));
+    page.skip = Some(1);
+    let two = load_many(
+        &mut run,
+        &users,
+        |u| Some(u.id),
+        &page,
+        "authorId",
+        |p: &Post| Some(p.author_id),
+        Some(5),
+    )
+    .await
+    .unwrap();
+    assert!(two.iter().all(|p| p.len() == 2), "3 posts, skip 1");
+    db.database().drop().await.unwrap();
+}
+
+#[tokio::test]
+async fn ac_fr_004_paging_an_include_that_cannot_run_is_an_error() {
+    let Some(db) = setup().await else { return };
+    let mut run = &db;
+    let posts: Vec<Post> = run.find(&by_id("Post")).await.unwrap();
+    let mut paged = by_id("User");
+    paged.skip = Some(1);
+    let before = db.statements();
+    let err = load_one(
+        &mut run,
+        &posts,
+        |p| Some(p.author_id),
+        &paged,
+        "id",
+        |u: &User| Some(u.id),
+    )
+    .await
+    .unwrap_err();
+    assert_eq!(err.code, "P2009");
+    let users: Vec<User> = run.find(&by_id("User")).await.unwrap();
+    let err = load_many(
+        &mut run,
+        &users,
+        |u| Some(u.id),
+        &by_id("Post"),
+        "authorId",
+        |p: &Post| Some(p.author_id),
+        Some(-1),
+    )
+    .await
+    .unwrap_err();
+    assert_eq!(err.code, "P2009");
+    assert_eq!(db.statements() - before, 1, "only the users were read");
+    db.database().drop().await.unwrap();
+}
+
+#[tokio::test]
 async fn transactions_commit_or_leave_nothing() {
     let Some(db) = setup().await else { return };
     let failed: lumen_orm::Result<()> = db

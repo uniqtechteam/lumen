@@ -658,6 +658,12 @@ pub mod account {
             self.take = Some(n);
             self
         }
+        /// Skip the first `n` related documents of each document (done on the server).
+        #[must_use]
+        pub fn skip(mut self, n: u64) -> Self {
+            self.related.skip = Some(n);
+            self
+        }
         /// Run both queries.
         ///
         /// # Errors
@@ -1254,7 +1260,6 @@ pub mod session {
     pub struct IncludeAccount<R> {
         find: FindMany<R>,
         related: ::lumen_orm::mongo::Find,
-        take: Option<i64>,
     }
     impl<R: ::lumen_orm::mongo::MongoRun> IncludeAccount<R> {
         /// Only related documents matching `f`.
@@ -1272,12 +1277,6 @@ pub mod session {
         #[must_use]
         pub fn order_by(mut self, order: (String, ::lumen_orm::Order)) -> Self {
             self.related.order.push(order);
-            self
-        }
-        /// At most `n` related documents per document (done on the server).
-        #[must_use]
-        pub fn take(mut self, n: i64) -> Self {
-            self.take = Some(n);
             self
         }
         /// Run both queries.
@@ -1320,7 +1319,6 @@ pub mod session {
             IncludeAccount {
                 find: self,
                 related: super::account::find(),
-                take: None,
             }
         }
     }

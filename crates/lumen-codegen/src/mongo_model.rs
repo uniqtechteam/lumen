@@ -424,6 +424,30 @@ fn include_code(schema: &Schema, model: &Model, inc: &Include) -> TokenStream {
             },
         )
     };
+    // paging a to-one relation means nothing, so its builder has no take or skip
+    let paging = if inc.many {
+        quote! {
+            /// At most `n` related documents per document (done on the server).
+            #[must_use]
+            pub fn take(mut self, n: i64) -> Self {
+                self.take = Some(n);
+                self
+            }
+            /// Skip the first `n` related documents of each document (done on the server).
+            #[must_use]
+            pub fn skip(mut self, n: u64) -> Self {
+                self.related.skip = Some(n);
+                self
+            }
+        }
+    } else {
+        TokenStream::new()
+    };
+    let (take_field, take_init) = if inc.many {
+        (quote!(, take: Option<i64>), quote!(, take: None))
+    } else {
+        (TokenStream::new(), TokenStream::new())
+    };
     let with_doc = format!(" A `{}` with its `{}`.", model.name, inc.field);
     quote! {
         #[doc = #with_doc]
@@ -438,7 +462,7 @@ fn include_code(schema: &Schema, model: &Model, inc: &Include) -> TokenStream {
         }
 
         /// A find-many that also loads one relation (one more query for all the documents).
-        pub struct #builder<R> { find: FindMany<R>, related: ::lumen_orm::mongo::Find, take: Option<i64> }
+        pub struct #builder<R> { find: FindMany<R>, related: ::lumen_orm::mongo::Find #take_field }
 
         impl<R: ::lumen_orm::mongo::MongoRun> #builder<R> {
             /// Only related documents matching `f`.
@@ -453,12 +477,7 @@ fn include_code(schema: &Schema, model: &Model, inc: &Include) -> TokenStream {
                 self.related.order.push(order);
                 self
             }
-            /// At most `n` related documents per document (done on the server).
-            #[must_use]
-            pub fn take(mut self, n: i64) -> Self {
-                self.take = Some(n);
-                self
-            }
+            #paging
             /// Run both queries.
             ///
             /// # Errors
@@ -474,7 +493,7 @@ fn include_code(schema: &Schema, model: &Model, inc: &Include) -> TokenStream {
             /// Also load `#field`.
             #[must_use]
             pub fn #method(self) -> #builder<R> {
-                #builder { find: self, related: super::#target_mod::find(), take: None }
+                #builder { find: self, related: super::#target_mod::find() #take_init }
             }
         }
     }

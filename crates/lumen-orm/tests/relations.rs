@@ -278,6 +278,151 @@ async fn take_per_parent_and_child_filters_run_in_sql() {
 }
 
 #[tokio::test]
+async fn ac_fr_004_skip_and_take_inside_an_include_page_each_parent_in_sql() {
+    let Some((admin, db, name)) = setup().await else {
+        return;
+    };
+    seed(&db).await;
+    let mut run = &db;
+    let users: Vec<User> = run.fetch_all(select("User").build()).await.unwrap();
+    let mut page = select("Post");
+    page.order = vec![("id".into(), Order::Desc)];
+    page.offset = Some(1);
+    page.limit = Some(1);
+    let before = db.statements();
+    let posts = load_many(
+        &mut run,
+        &users,
+        |u| Some(u.id),
+        &page,
+        "authorId",
+        |p: &Post| Some(p.author_id),
+        None,
+    )
+    .await
+    .unwrap();
+    assert_eq!(db.statements() - before, 1, "one statement for all parents");
+    assert!(
+        posts.iter().all(|p| p.len() == 1 && p[0].title == "post 2"),
+        "the second-newest post of every user, not one post overall"
+    );
+
+    // skip alone, and `take` given as the argument
+    page.limit = None;
+    page.offset = Some(2);
+    let last = load_many(
+        &mut run,
+        &users,
+        |u| Some(u.id),
+        &page,
+        "authorId",
+        |p: &Post| Some(p.author_id),
+        None,
+    )
+    .await
+    .unwrap();
+    assert!(last.iter().all(|p| p.len() == 1 && p[0].title == "post 1"));
+    page.offset = Some(1);
+    let two = load_many(
+        &mut run,
+        &users,
+        |u| Some(u.id),
+        &page,
+        "authorId",
+        |p: &Post| Some(p.author_id),
+        Some(5),
+    )
+    .await
+    .unwrap();
+    assert!(two.iter().all(|p| p.len() == 2), "3 posts, skip 1");
+
+    // composite keys page per key too
+    run_sql(db.pool(), r#"INSERT INTO "Line" VALUES (1, 1), (1, 2); INSERT INTO "Shipment" ("orderId", n) VALUES (1, 1), (1, 1), (1, 1), (1, 2);"#).await;
+    let lines: Vec<Line> = run
+        .fetch_all(
+            Select {
+                order: vec![("n".into(), Order::Asc)],
+                ..Select::from(Table::new("Line"))
+            }
+            .build(),
+        )
+        .await
+        .unwrap();
+    let mut shipments_page = select("Shipment");
+    shipments_page.offset = Some(1);
+    shipments_page.limit = Some(1);
+    let shipments = load_many_composite(
+        &mut run,
+        &lines,
+        |l| Some((l.order_id, l.n)),
+        &shipments_page,
+        &["orderId".to_owned(), "n".to_owned()],
+        |s: &Shipment| (s.order_id, s.n),
+        |(o, n)| vec![Value::Int(*o), Value::Int(*n)],
+    )
+    .await
+    .unwrap();
+    assert_eq!(shipments.iter().map(Vec::len).collect::<Vec<_>>(), [1, 0]);
+    finish(admin, db, name).await;
+}
+
+#[tokio::test]
+async fn ac_fr_004_paging_an_include_that_cannot_run_in_sql_is_an_error() {
+    let Some((admin, db, name)) = setup().await else {
+        return;
+    };
+    seed(&db).await;
+    let mut run = &db;
+    let posts: Vec<Post> = run.fetch_all(select("Post").build()).await.unwrap();
+    let mut paged = select("User");
+    paged.limit = Some(1);
+    let err = load_one(
+        &mut run,
+        &posts,
+        |p| Some(p.author_id),
+        &paged,
+        "id",
+        |u: &User| Some(u.id),
+    )
+    .await
+    .unwrap_err();
+    assert_eq!(err.code, "P2009");
+    assert!(err.message.contains("to-one"), "{}", err.message);
+
+    let users: Vec<User> = run.fetch_all(select("User").build()).await.unwrap();
+    let mut backwards = select("Post");
+    backwards.offset = Some(-1);
+    let before = db.statements();
+    let err = load_many(
+        &mut run,
+        &users,
+        |u| Some(u.id),
+        &backwards,
+        "authorId",
+        |p: &Post| Some(p.author_id),
+        None,
+    )
+    .await
+    .unwrap_err();
+    assert_eq!(err.code, "P2009");
+    assert_eq!(err.http_status(), 400);
+    let err = load_many(
+        &mut run,
+        &users,
+        |u| Some(u.id),
+        &select("Post"),
+        "authorId",
+        |p: &Post| Some(p.author_id),
+        Some(-2),
+    )
+    .await
+    .unwrap_err();
+    assert_eq!(err.code, "P2009");
+    assert_eq!(db.statements() - before, 0, "refused before any query");
+    finish(admin, db, name).await;
+}
+
+#[tokio::test]
 async fn composite_keys() {
     let Some((admin, db, name)) = setup().await else {
         return;

@@ -243,6 +243,30 @@ fn ac_006_mongo_db_push_and_pull() {
     );
     assert!(stderr(&ok(d, &["db", "push"])).contains("in sync"));
 
+    // SPEC-MONGO-001 FR-002: an index the schema no longer has is reported, not dropped
+    let user = |extra: &str| {
+        format!(
+            "model User {{\n  id    String  @id @default(auto()) @map(\"_id\") @db.ObjectId\n  email String  @unique\n  name  String?\n{extra}}}\n"
+        )
+    };
+    models(d, &user("\n  @@index([name])\n"));
+    let pushed = stderr(&ok(d, &["db", "push"]));
+    assert!(
+        pushed.contains("created index User_name_idx on User"),
+        "{pushed}"
+    );
+    models(d, &user(""));
+    let pushed = stderr(&ok(d, &["db", "push"]));
+    assert!(
+        pushed.contains("not in the schema") && pushed.contains("User_name_idx on User (name)"),
+        "{pushed}"
+    );
+    assert!(!pushed.contains("dropped"), "{pushed}");
+    assert!(
+        stderr(&ok(d, &["db", "push"])).contains("User_name_idx"),
+        "still there, so reported again"
+    );
+
     let pulled = String::from_utf8(ok(d, &["db", "pull", "--print"]).stdout).unwrap();
     assert!(pulled.contains("model User"), "{pulled}");
     assert!(
