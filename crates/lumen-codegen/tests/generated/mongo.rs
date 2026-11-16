@@ -283,6 +283,31 @@ pub mod account {
             related().none(f)
         }
     }
+    /// Conditions on the related `Settings` records of `settings`, built with `settings::..` filters.
+    pub mod settings {
+        fn related() -> ::lumen_orm::Related {
+            ::lumen_orm::Related::new(
+                ::lumen_orm::Table::new("Settings"),
+                &[("accountId", "_id")],
+            )
+        }
+        /// The related record exists and matches `f`.
+        pub fn is(f: ::lumen_orm::Filter) -> ::lumen_orm::Filter {
+            related().is(f)
+        }
+        /// There is no related record, or it does not match `f`.
+        pub fn is_not(f: ::lumen_orm::Filter) -> ::lumen_orm::Filter {
+            related().is_not(f)
+        }
+        /// There is no related record (Prisma's `is: null`).
+        pub fn is_null() -> ::lumen_orm::Filter {
+            related().is_null()
+        }
+        /// There is a related record (Prisma's `isNot: null`).
+        pub fn is_not_null() -> ::lumen_orm::Filter {
+            related().is_not_null()
+        }
+    }
     /// The data for a new document. The id (`auto()`) and fields with defaults are `Option`;
     /// the client fills the defaults, since MongoDB has none.
     #[derive(Debug, Clone, PartialEq)]
@@ -748,7 +773,6 @@ pub mod account {
     pub struct IncludeSettings<R> {
         find: FindMany<R>,
         related: ::lumen_orm::mongo::Find,
-        take: Option<i64>,
     }
     impl<R: ::lumen_orm::mongo::MongoRun> IncludeSettings<R> {
         /// Only related documents matching `f`.
@@ -766,12 +790,6 @@ pub mod account {
         #[must_use]
         pub fn order_by(mut self, order: (String, ::lumen_orm::Order)) -> Self {
             self.related.order.push(order);
-            self
-        }
-        /// At most `n` related documents per document (done on the server).
-        #[must_use]
-        pub fn take(mut self, n: i64) -> Self {
-            self.take = Some(n);
             self
         }
         /// Run both queries.
@@ -810,7 +828,6 @@ pub mod account {
             IncludeSettings {
                 find: self,
                 related: super::settings::find(),
-                take: None,
             }
         }
     }
@@ -1793,6 +1810,14 @@ pub mod settings {
         pub fn ends_with(v: impl Into<String>) -> ::lumen_orm::Filter {
             ::lumen_orm::col(COLUMN).ends_with(v)
         }
+        /// Starts with the text, ignoring case.
+        pub fn starts_with_insensitive(v: impl Into<String>) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).starts_with_insensitive(v)
+        }
+        /// Ends with the text, ignoring case.
+        pub fn ends_with_insensitive(v: impl Into<String>) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).ends_with_insensitive(v)
+        }
         /// Equal, ignoring case.
         pub fn equals_insensitive(v: impl Into<String>) -> ::lumen_orm::Filter {
             ::lumen_orm::col(COLUMN).equals_insensitive(v)
@@ -1804,6 +1829,23 @@ pub mod settings {
         /// Largest first.
         pub fn desc() -> (String, ::lumen_orm::Order) {
             (COLUMN.to_owned(), ::lumen_orm::Order::Desc)
+        }
+    }
+    /// Conditions on the related `Account` records of `account`, built with `account::..` filters.
+    pub mod account {
+        fn related() -> ::lumen_orm::Related {
+            ::lumen_orm::Related::new(
+                ::lumen_orm::Table::new("Account"),
+                &[("_id", "accountId")],
+            )
+        }
+        /// The related record exists and matches `f`.
+        pub fn is(f: ::lumen_orm::Filter) -> ::lumen_orm::Filter {
+            related().is(f)
+        }
+        /// There is no related record, or it does not match `f`.
+        pub fn is_not(f: ::lumen_orm::Filter) -> ::lumen_orm::Filter {
+            related().is_not(f)
         }
     }
     /// The data for a new document. The id (`auto()`) and fields with defaults are `Option`;
@@ -2164,7 +2206,6 @@ pub mod settings {
     pub struct IncludeAccount<R> {
         find: FindMany<R>,
         related: ::lumen_orm::mongo::Find,
-        take: Option<i64>,
     }
     impl<R: ::lumen_orm::mongo::MongoRun> IncludeAccount<R> {
         /// Only related documents matching `f`.
@@ -2182,12 +2223,6 @@ pub mod settings {
         #[must_use]
         pub fn order_by(mut self, order: (String, ::lumen_orm::Order)) -> Self {
             self.related.order.push(order);
-            self
-        }
-        /// At most `n` related documents per document (done on the server).
-        #[must_use]
-        pub fn take(mut self, n: i64) -> Self {
-            self.take = Some(n);
             self
         }
         /// Run both queries.
@@ -2230,7 +2265,6 @@ pub mod settings {
             IncludeAccount {
                 find: self,
                 related: super::account::find(),
-                take: None,
             }
         }
     }
