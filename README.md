@@ -84,6 +84,32 @@ let result = client
 Errors carry Prisma's codes. For example, `err.code == "P2002"` is a duplicate, and `err.fields`
 names the columns. `err.http_status()` gives the status a web API should answer with.
 
+## Filters
+
+Every field has a module of typed conditions, and every relation field has one too. Here are the
+users who wrote at least one published post about Rust and have no profile yet:
+
+```rust
+let users = client
+    .user()
+    .find_many()
+    .filter(
+        user::posts::some(
+            post::published::equals(true).and(post::title::contains_insensitive("rust")),
+        )
+        .and(user::profile::is_null()),
+    )
+    .exec()
+    .await?;
+```
+
+To-many relations have `some`, `every` and `none`. To-one relations have `is` and `is_not`, plus
+`is_null` and `is_not_null` when the relation is optional. They nest, so
+`user::posts::some(post::tags::some(tag::name::equals("rust")))` works too. They mean what they
+mean in Prisma: `every` is true for a user with no posts. Text fields also have `starts_with`,
+`ends_with` and `contains`, each with an `_insensitive` version. The full list is in
+[docs/prisma-users.md](docs/prisma-users.md).
+
 ## How it works
 
 ```mermaid
@@ -139,6 +165,7 @@ behind.
 | `db push` | tables, columns, indexes, foreign keys, enums | collections and indexes |
 | `db pull` | 0.2 | by sampling documents |
 | Generated client: filters, ordering, paging, create, update, upsert, delete, count | yes | yes |
+| Relation filters (`some`, `every`, `none`, `is`, `is_not`) | yes (`EXISTS`) | yes, except many-to-many (one extra statement per relation filter) |
 | Includes, one statement per level | yes | yes (`$in`) |
 | Transactions | yes, with isolation levels | yes, on a replica set |
 | Errors with Prisma codes (P2002, P2003, P2025, ...) | yes | yes |

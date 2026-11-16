@@ -1,5 +1,8 @@
 //! MongoDB: the same filters, ordering and paging as on Postgres, rendered as BSON queries.
-//! `not` keeps documents where the field is null or missing, as in Prisma.
+//! `not` keeps documents where the field is null or missing, as in Prisma. Relation filters run as
+//! one extra statement per relation filter (see `relations`).
+
+mod relations;
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -14,6 +17,7 @@ use crate::error::{Error, Result};
 use crate::filter::{Filter, Mode, Op};
 use crate::query::Order;
 use crate::value::Value;
+use relations::{Exec, resolve_opt};
 
 /// The BSON types the generated MongoDB client uses.
 pub use mongodb::bson::{Binary, DateTime, Decimal128, oid::ObjectId};
@@ -173,6 +177,12 @@ pub fn query_of(filter: &Filter) -> Result<Document> {
             } else {
                 doc! { "$or": alternatives }
             }
+        }
+        Filter::Relation(..) => {
+            return Err(Error::new(
+                "P2026",
+                "a relation filter needs the database: run it through MongoDb or MongoTx",
+            ));
         }
     })
 }
@@ -354,11 +364,30 @@ impl MongoDb {
         self.statements.fetch_add(1, Ordering::Relaxed);
     }
 
+    /// `filter` with its relation filters turned into key filters.
+    async fn resolved(&self, filter: Option<&Filter>) -> Result<Option<Filter>> {
+        let mut ex = Exec {
+            db: &self.db,
+            session: None,
+            statements: &self.statements,
+        };
+        resolve_opt(&mut ex, filter).await
+    }
+
+    /// `find` with its relation filters turned into key filters.
+    async fn resolved_find(&self, find: &Find) -> Result<Find> {
+        Ok(Find {
+            filter: self.resolved(find.filter.as_ref()).await?,
+            ..find.clone()
+        })
+    }
+
     /// The matching documents, decoded as `T`.
     ///
     /// # Errors
     /// A coded [`Error`].
     pub async fn find<T: DeserializeOwned + Send + Sync>(&self, find: &Find) -> Result<Vec<T>> {
+        let find = &self.resolved_find(find).await?;
         self.tick();
         let (filter, options) = find_parts(find)?;
         let mut cursor = self
@@ -390,6 +419,7 @@ impl MongoDb {
         key: &str,
         n: i64,
     ) -> Result<Vec<T>> {
+        let find = &self.resolved_find(find).await?;
         self.tick();
         let mut cursor = self
             .db
@@ -451,8 +481,13 @@ impl MongoDb {
     /// # Errors
     /// A coded [`Error`].
     pub async fn count(&self, collection: &str, filter: Option<&Filter>) -> Result<u64> {
+        let filter = self.resolved(filter).await?;
         self.tick();
-        let filter = filter.map(query_of).transpose()?.unwrap_or_default();
+        let filter = filter
+            .as_ref()
+            .map(query_of)
+            .transpose()?
+            .unwrap_or_default();
         self.db
             .collection::<Document>(collection)
             .count_documents(filter)
@@ -494,8 +529,13 @@ impl MongoDb {
         filter: Option<&Filter>,
         set: Vec<(String, Value)>,
     ) -> Result<u64> {
+        let filter = self.resolved(filter).await?;
         self.tick();
-        let filter = filter.map(query_of).transpose()?.unwrap_or_default();
+        let filter = filter
+            .as_ref()
+            .map(query_of)
+            .transpose()?
+            .unwrap_or_default();
         let mut fields = Document::new();
         for (k, v) in &set {
             fields.insert(k.clone(), bson_of(v)?);
@@ -513,8 +553,13 @@ impl MongoDb {
     /// # Errors
     /// A coded [`Error`].
     pub async fn delete_many(&self, collection: &str, filter: Option<&Filter>) -> Result<u64> {
+        let filter = self.resolved(filter).await?;
         self.tick();
-        let filter = filter.map(query_of).transpose()?.unwrap_or_default();
+        let filter = filter
+            .as_ref()
+            .map(query_of)
+            .transpose()?
+            .unwrap_or_default();
         self.db
             .collection::<Document>(collection)
             .delete_many(filter)
@@ -655,8 +700,28 @@ impl<T: MongoRun> MongoRun for &mut T {
     }
 }
 
+impl MongoTx {
+    /// `filter` with its relation filters turned into key filters, inside this transaction.
+    async fn resolved(&mut self, filter: Option<&Filter>) -> Result<Option<Filter>> {
+        let mut ex = Exec {
+            db: &self.db,
+            session: Some(&mut self.session),
+            statements: &self.statements,
+        };
+        resolve_opt(&mut ex, filter).await
+    }
+
+    async fn resolved_find(&mut self, find: &Find) -> Result<Find> {
+        Ok(Find {
+            filter: self.resolved(find.filter.as_ref()).await?,
+            ..find.clone()
+        })
+    }
+}
+
 impl MongoRun for MongoTx {
     async fn find<T: DeserializeOwned + Send + Sync>(&mut self, find: &Find) -> Result<Vec<T>> {
+        let find = &self.resolved_find(find).await?;
         self.statements.fetch_add(1, Ordering::Relaxed);
         let (filter, options) = find_parts(find)?;
         let mut cursor = self
@@ -688,6 +753,7 @@ impl MongoRun for MongoTx {
         key: &str,
         n: i64,
     ) -> Result<Vec<T>> {
+        let find = &self.resolved_find(find).await?;
         self.statements.fetch_add(1, Ordering::Relaxed);
         let mut cursor = self
             .db
@@ -711,8 +777,13 @@ impl MongoRun for MongoTx {
     }
 
     async fn count(&mut self, collection: &str, filter: Option<&Filter>) -> Result<u64> {
+        let filter = self.resolved(filter).await?;
         self.statements.fetch_add(1, Ordering::Relaxed);
-        let filter = filter.map(query_of).transpose()?.unwrap_or_default();
+        let filter = filter
+            .as_ref()
+            .map(query_of)
+            .transpose()?
+            .unwrap_or_default();
         self.db
             .collection::<Document>(collection)
             .count_documents(filter)
@@ -748,8 +819,13 @@ impl MongoRun for MongoTx {
         filter: Option<&Filter>,
         set: Vec<(String, Value)>,
     ) -> Result<u64> {
+        let filter = self.resolved(filter).await?;
         self.statements.fetch_add(1, Ordering::Relaxed);
-        let filter = filter.map(query_of).transpose()?.unwrap_or_default();
+        let filter = filter
+            .as_ref()
+            .map(query_of)
+            .transpose()?
+            .unwrap_or_default();
         let mut fields = Document::new();
         for (k, v) in &set {
             fields.insert(k.clone(), bson_of(v)?);
@@ -764,8 +840,13 @@ impl MongoRun for MongoTx {
     }
 
     async fn delete_many(&mut self, collection: &str, filter: Option<&Filter>) -> Result<u64> {
+        let filter = self.resolved(filter).await?;
         self.statements.fetch_add(1, Ordering::Relaxed);
-        let filter = filter.map(query_of).transpose()?.unwrap_or_default();
+        let filter = filter
+            .as_ref()
+            .map(query_of)
+            .transpose()?
+            .unwrap_or_default();
         self.db
             .collection::<Document>(collection)
             .delete_many(filter)

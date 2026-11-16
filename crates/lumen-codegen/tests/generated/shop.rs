@@ -164,6 +164,14 @@ pub mod product {
         pub fn ends_with(v: impl Into<String>) -> ::lumen_orm::Filter {
             ::lumen_orm::col(COLUMN).ends_with(v)
         }
+        /// Starts with the text, ignoring case.
+        pub fn starts_with_insensitive(v: impl Into<String>) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).starts_with_insensitive(v)
+        }
+        /// Ends with the text, ignoring case.
+        pub fn ends_with_insensitive(v: impl Into<String>) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).ends_with_insensitive(v)
+        }
         /// Equal, ignoring case.
         pub fn equals_insensitive(v: impl Into<String>) -> ::lumen_orm::Filter {
             ::lumen_orm::col(COLUMN).equals_insensitive(v)
@@ -331,6 +339,27 @@ pub mod product {
         /// Largest first.
         pub fn desc() -> (String, ::lumen_orm::Order) {
             (COLUMN.to_owned(), ::lumen_orm::Order::Desc)
+        }
+    }
+    /// Conditions on the related `OrderLine` records of `lines`, built with `order_line::..` filters.
+    pub mod lines {
+        fn related() -> ::lumen_orm::Related {
+            ::lumen_orm::Related::new(
+                super::super::order_line::table(),
+                &[("productId", "id")],
+            )
+        }
+        /// At least one related record matches `f`.
+        pub fn some(f: ::lumen_orm::Filter) -> ::lumen_orm::Filter {
+            related().some(f)
+        }
+        /// Every related record matches `f` (true when there are none, as in Prisma).
+        pub fn every(f: ::lumen_orm::Filter) -> ::lumen_orm::Filter {
+            related().every(f)
+        }
+        /// No related record matches `f`.
+        pub fn none(f: ::lumen_orm::Filter) -> ::lumen_orm::Filter {
+            related().none(f)
         }
     }
     /// The data for a new record. Fields the database fills (ids, defaults) are `Option`.
@@ -854,6 +883,27 @@ pub mod order {
         /// Largest first.
         pub fn desc() -> (String, ::lumen_orm::Order) {
             (COLUMN.to_owned(), ::lumen_orm::Order::Desc)
+        }
+    }
+    /// Conditions on the related `OrderLine` records of `lines`, built with `order_line::..` filters.
+    pub mod lines {
+        fn related() -> ::lumen_orm::Related {
+            ::lumen_orm::Related::new(
+                super::super::order_line::table(),
+                &[("orderId", "id")],
+            )
+        }
+        /// At least one related record matches `f`.
+        pub fn some(f: ::lumen_orm::Filter) -> ::lumen_orm::Filter {
+            related().some(f)
+        }
+        /// Every related record matches `f` (true when there are none, as in Prisma).
+        pub fn every(f: ::lumen_orm::Filter) -> ::lumen_orm::Filter {
+            related().every(f)
+        }
+        /// No related record matches `f`.
+        pub fn none(f: ::lumen_orm::Filter) -> ::lumen_orm::Filter {
+            related().none(f)
         }
     }
     /// The data for a new record. Fields the database fills (ids, defaults) are `Option`.
@@ -1436,6 +1486,37 @@ pub mod order_line {
         /// Largest first.
         pub fn desc() -> (String, ::lumen_orm::Order) {
             (COLUMN.to_owned(), ::lumen_orm::Order::Desc)
+        }
+    }
+    /// Conditions on the related `Order` records of `order`, built with `order::..` filters.
+    pub mod order {
+        fn related() -> ::lumen_orm::Related {
+            ::lumen_orm::Related::new(super::super::order::table(), &[("id", "orderId")])
+        }
+        /// The related record exists and matches `f`.
+        pub fn is(f: ::lumen_orm::Filter) -> ::lumen_orm::Filter {
+            related().is(f)
+        }
+        /// There is no related record, or it does not match `f`.
+        pub fn is_not(f: ::lumen_orm::Filter) -> ::lumen_orm::Filter {
+            related().is_not(f)
+        }
+    }
+    /// Conditions on the related `Product` records of `product`, built with `product::..` filters.
+    pub mod product {
+        fn related() -> ::lumen_orm::Related {
+            ::lumen_orm::Related::new(
+                super::super::product::table(),
+                &[("id", "productId")],
+            )
+        }
+        /// The related record exists and matches `f`.
+        pub fn is(f: ::lumen_orm::Filter) -> ::lumen_orm::Filter {
+            related().is(f)
+        }
+        /// There is no related record, or it does not match `f`.
+        pub fn is_not(f: ::lumen_orm::Filter) -> ::lumen_orm::Filter {
+            related().is_not(f)
         }
     }
     /// The data for a new record. Fields the database fills (ids, defaults) are `Option`.

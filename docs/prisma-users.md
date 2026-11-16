@@ -43,9 +43,22 @@ Passing text to an `Int` field does not compile.
 | `{ email: "a" }` | `user::email::equals("a")` |
 | `{ email: { endsWith: "@x.com" } }` | `user::email::ends_with("@x.com")` |
 | `{ email: { contains: "a", mode: "insensitive" } }` | `user::email::contains_insensitive("a")` |
+| `{ email: { startsWith: "A", mode: "insensitive" } }` | `user::email::starts_with_insensitive("A")` (and `ends_with_insensitive`) |
 | `{ id: { in: [1, 2] } }` | `user::id::is_in([1, 2])` |
 | `{ name: null }` | `user::name::is_null()` |
 | `AND`, `OR`, `NOT` | `a.and(b)`, `a.or(b)`, `!a` |
+| `{ posts: { some: { published: true } } }` | `user::posts::some(post::published::equals(true))` |
+| `{ posts: { every: .. } }`, `{ posts: { none: .. } }` | `user::posts::every(..)`, `user::posts::none(..)` |
+| `{ author: { is: { email: "a" } } }` | `post::author::is(user::email::equals("a"))` |
+| `{ author: { isNot: .. } }` | `post::author::is_not(..)` |
+| `{ profile: { is: null } }`, `{ profile: { isNot: null } }` | `user::profile::is_null()`, `user::profile::is_not_null()` (optional relations only) |
+
+Relation filters nest inside each other and inside `and`, `or` and `!`, and work on one-to-one,
+one-to-many and (on Postgres) many-to-many relations. As in Prisma, `every` is true for a record
+with no related records, and `is_not` matches records with no related record. On Postgres they are
+`EXISTS` subqueries. MongoDB has no joins in a plain find, so lumen first collects the keys of the
+related documents that match, with one aggregation per relation filter, and then matches on those
+keys with `$in`. Many-to-many relation filters are not available on MongoDB yet.
 
 ## Values
 

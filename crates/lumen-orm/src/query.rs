@@ -3,7 +3,7 @@
 
 use std::fmt::Write as _;
 
-use crate::filter::{Filter, Mode, Op};
+use crate::filter::{Filter, Link, Mode, Op, Quantifier, Related};
 use crate::value::Value;
 
 /// `"name"` with quotes doubled.
@@ -62,9 +62,30 @@ pub struct Built {
 struct Writer {
     sql: String,
     params: Vec<Value>,
+    /// The table the statement filters, which relation subqueries refer back to.
+    table: String,
+    /// Inside a relation subquery: the alias that qualifies its columns.
+    scope: Option<String>,
+    /// Aliases handed out so far, so nested subqueries never share one.
+    aliases: usize,
 }
 
 impl Writer {
+    fn on(table: &Table) -> Self {
+        Self {
+            table: table.sql(),
+            ..Self::default()
+        }
+    }
+
+    /// A column of the rows being filtered: bare at the top, qualified inside a subquery.
+    fn col(&self, column: &str) -> String {
+        match &self.scope {
+            Some(alias) => format!("{alias}.{}", ident(column)),
+            None => ident(column),
+        }
+    }
+
     fn push(&mut self, s: &str) {
         self.sql.push_str(s);
     }
@@ -90,17 +111,19 @@ impl Writer {
             (Mode::Insensitive, false) => "ILIKE",
             (Mode::Insensitive, true) => "NOT ILIKE",
         };
-        let _ = write!(self.sql, "{} {op} ", ident(column));
+        let c = self.col(column);
+        let _ = write!(self.sql, "{c} {op} ");
         self.param(Value::Text(pattern));
     }
 
     fn compare(&mut self, column: &str, op: &str, value: Value, mode: Mode) {
+        let c = self.col(column);
         if mode == Mode::Insensitive {
-            let _ = write!(self.sql, "LOWER({}) {op} LOWER(", ident(column));
+            let _ = write!(self.sql, "LOWER({c}) {op} LOWER(");
             self.param(value);
             self.push(")");
         } else {
-            let _ = write!(self.sql, "{} {op} ", ident(column));
+            let _ = write!(self.sql, "{c} {op} ");
             self.param(value);
         }
     }
@@ -111,12 +134,8 @@ impl Writer {
             self.push(if negate { "TRUE" } else { "FALSE" });
             return;
         }
-        let _ = write!(
-            self.sql,
-            "{} {}IN (",
-            ident(column),
-            if negate { "NOT " } else { "" }
-        );
+        let c = self.col(column);
+        let _ = write!(self.sql, "{c} {}IN (", if negate { "NOT " } else { "" });
         for (i, v) in values.into_iter().enumerate() {
             if i > 0 {
                 self.push(", ");
@@ -157,27 +176,81 @@ impl Writer {
             }
             Filter::Column(column, op) => self.op(column, op.clone()),
             Filter::Tuples(columns, rows) => self.tuples(columns, rows),
+            Filter::Relation(quantifier, related) => self.relation(*quantifier, related),
         }
     }
 
+    /// `EXISTS` / `NOT EXISTS` over the related rows, linked to the current ones by their columns.
+    /// `every` is "no related row fails the condition".
+    fn relation(&mut self, quantifier: Quantifier, related: &Related) {
+        let outer = self.scope.clone().unwrap_or_else(|| self.table.clone());
+        self.aliases += 1;
+        let alias = ident(&format!("__lumen_r{}", self.aliases));
+        self.push(match quantifier {
+            Quantifier::Some | Quantifier::Is => "EXISTS (SELECT 1 FROM ",
+            Quantifier::Every | Quantifier::None | Quantifier::IsNot => {
+                "NOT EXISTS (SELECT 1 FROM "
+            }
+        });
+        let _ = write!(self.sql, "{} AS {alias}", related.table.sql());
+        let mut links = Vec::new();
+        match &related.link {
+            Link::Direct(on) => {
+                for (r, t) in on {
+                    links.push(format!("{alias}.{} = {outer}.{}", ident(r), ident(t)));
+                }
+            }
+            Link::Through {
+                table,
+                this,
+                related: to_related,
+            } => {
+                self.aliases += 1;
+                let join = ident(&format!("__lumen_r{}", self.aliases));
+                let _ = write!(self.sql, ", {} AS {join}", table.sql());
+                for (j, t) in this {
+                    links.push(format!("{join}.{} = {outer}.{}", ident(j), ident(t)));
+                }
+                for (j, r) in to_related {
+                    links.push(format!("{join}.{} = {alias}.{}", ident(j), ident(r)));
+                }
+            }
+        }
+        if links.is_empty() {
+            links.push("TRUE".to_owned());
+        }
+        let _ = write!(self.sql, " WHERE {}", links.join(" AND "));
+        let negate = quantifier == Quantifier::Every;
+        let trivial = matches!(&related.filter, Filter::And(items) if items.is_empty());
+        if negate || !trivial {
+            self.push(if negate { " AND NOT (" } else { " AND (" });
+            let saved = self.scope.replace(alias);
+            self.filter(&related.filter);
+            self.scope = saved;
+            self.push(")");
+        }
+        self.push(")");
+    }
+
     fn op(&mut self, column: &str, op: Op) {
+        let c = self.col(column);
         match op {
             Op::Equals(Value::Null, _) | Op::IsNull(true) => {
-                let _ = write!(self.sql, "{} IS NULL", ident(column));
+                let _ = write!(self.sql, "{c} IS NULL");
             }
             Op::NotEquals(Value::Null, _) | Op::IsNull(false) => {
-                let _ = write!(self.sql, "{} IS NOT NULL", ident(column));
+                let _ = write!(self.sql, "{c} IS NOT NULL");
             }
             Op::Equals(v, mode) => self.compare(column, "=", v, mode),
             // Prisma's `not`: NULLs are not equal to anything, so they match too
             Op::NotEquals(v, mode) => {
                 self.push("(");
                 self.compare(column, "<>", v, mode);
-                let _ = write!(self.sql, " OR {} IS NULL)", ident(column));
+                let _ = write!(self.sql, " OR {c} IS NULL)");
             }
             Op::In(values) => self.list(column, values, false),
             Op::Any(values) => {
-                let _ = write!(self.sql, "{} = ANY(", ident(column));
+                let _ = write!(self.sql, "{c} = ANY(");
                 self.param(Value::List(values));
                 self.push(")");
             }
@@ -203,7 +276,8 @@ impl Writer {
             self.push("FALSE");
             return;
         }
-        let _ = write!(self.sql, "({}) IN (", columns_sql(columns));
+        let cols: Vec<String> = columns.iter().map(|c| self.col(c)).collect();
+        let _ = write!(self.sql, "({}) IN (", cols.join(", "));
         for (i, row) in rows.iter().enumerate() {
             self.push(if i == 0 { "(" } else { ", (" });
             for (j, v) in row.iter().enumerate() {
@@ -318,7 +392,7 @@ impl Select {
         if !self.per_key.is_empty() && (self.limit.is_some() || self.offset.is_some()) {
             return self.build_per_key();
         }
-        let mut w = Writer::default();
+        let mut w = Writer::on(&self.table);
         w.push("SELECT ");
         if !self.distinct.is_empty() {
             let _ = write!(w.sql, "DISTINCT ON ({}) ", columns_sql(&self.distinct));
@@ -336,7 +410,7 @@ impl Select {
     /// Rows numbered per key, then rows `offset + 1 ..= offset + limit` of each key, in the
     /// select's order.
     fn build_per_key(&self) -> Built {
-        let mut w = Writer::default();
+        let mut w = Writer::on(&self.table);
         let order = if self.order.is_empty() {
             String::new()
         } else {
@@ -386,7 +460,7 @@ impl Select {
     /// `SELECT COUNT(*)` over the same rows (ordering ignored, paging kept).
     #[must_use]
     pub fn count(&self) -> Built {
-        let mut w = Writer::default();
+        let mut w = Writer::on(&self.table);
         let inner = Select {
             columns: Vec::new(),
             order: Vec::new(),
@@ -428,7 +502,7 @@ impl Insert {
     /// The SQL.
     #[must_use]
     pub fn build(&self) -> Built {
-        let mut w = Writer::default();
+        let mut w = Writer::on(&self.table);
         let _ = write!(w.sql, "INSERT INTO {}", self.table.sql());
         if self.columns.is_empty() {
             w.push(" DEFAULT VALUES");
@@ -484,7 +558,7 @@ impl Update {
     /// The SQL.
     #[must_use]
     pub fn build(&self) -> Built {
-        let mut w = Writer::default();
+        let mut w = Writer::on(&self.table);
         let _ = write!(w.sql, "UPDATE {} SET ", self.table.sql());
         for (i, (column, v)) in self.set.iter().enumerate() {
             if i > 0 {
@@ -519,7 +593,7 @@ impl Delete {
     /// The SQL.
     #[must_use]
     pub fn build(&self) -> Built {
-        let mut w = Writer::default();
+        let mut w = Writer::on(&self.table);
         let _ = write!(w.sql, "DELETE FROM {}", self.table.sql());
         if let Some(f) = &self.filter {
             w.push(" WHERE ");
@@ -657,6 +731,58 @@ mod tests {
             q.build()
                 .sql
                 .contains("(\"a\", \"b\") IN (($1, $2), ($3, $4))")
+        );
+    }
+
+    #[test]
+    fn relation_filters_are_correlated_subqueries() {
+        use crate::filter::Related;
+        let posts = || Related::new(Table::new("Post"), &[("authorId", "id")]);
+        let mut q = Select::from(Table::new("User"));
+        q.columns = vec!["id".into()];
+        q.filter = Some(
+            posts()
+                .some(col("title").equals("a"))
+                .and(posts().every(col("published").equals(true)))
+                .and(
+                    posts().none(
+                        Related::new(Table::new("User"), &[("id", "authorId")])
+                            .is(col("email").ends_with_insensitive("@x.dev")),
+                    ),
+                ),
+        );
+        let b = q.build();
+        assert_eq!(
+            b.sql,
+            "SELECT \"id\" FROM \"User\" WHERE (\
+             EXISTS (SELECT 1 FROM \"Post\" AS \"__lumen_r1\" WHERE \"__lumen_r1\".\"authorId\" = \"User\".\"id\" AND (\"__lumen_r1\".\"title\" = $1)) AND \
+             NOT EXISTS (SELECT 1 FROM \"Post\" AS \"__lumen_r2\" WHERE \"__lumen_r2\".\"authorId\" = \"User\".\"id\" AND NOT (\"__lumen_r2\".\"published\" = $2)) AND \
+             NOT EXISTS (SELECT 1 FROM \"Post\" AS \"__lumen_r3\" WHERE \"__lumen_r3\".\"authorId\" = \"User\".\"id\" AND (\
+             EXISTS (SELECT 1 FROM \"User\" AS \"__lumen_r4\" WHERE \"__lumen_r4\".\"id\" = \"__lumen_r3\".\"authorId\" AND (\"__lumen_r4\".\"email\" ILIKE $3)))))"
+        );
+        assert_eq!(
+            b.params,
+            [
+                Value::Text("a".into()),
+                Value::Bool(true),
+                Value::Text("%@x.dev".into())
+            ]
+        );
+
+        let tags = Related::through(
+            Table::new("Tag"),
+            Table::new("_PostToTag"),
+            &[("A", "id")],
+            &[("B", "name")],
+        );
+        let delete = Delete {
+            table: Table::new("Post"),
+            filter: Some(tags.is_null()),
+            returning: vec![],
+        };
+        assert_eq!(
+            delete.build().sql,
+            "DELETE FROM \"Post\" WHERE NOT EXISTS (SELECT 1 FROM \"Tag\" AS \"__lumen_r1\", \"_PostToTag\" AS \"__lumen_r2\" WHERE \"__lumen_r2\".\"A\" = \"Post\".\"id\" AND \"__lumen_r2\".\"B\" = \"__lumen_r1\".\"name\")"
         );
     }
 }

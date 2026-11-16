@@ -233,6 +233,14 @@ pub mod user {
         pub fn ends_with(v: impl Into<String>) -> ::lumen_orm::Filter {
             ::lumen_orm::col(COLUMN).ends_with(v)
         }
+        /// Starts with the text, ignoring case.
+        pub fn starts_with_insensitive(v: impl Into<String>) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).starts_with_insensitive(v)
+        }
+        /// Ends with the text, ignoring case.
+        pub fn ends_with_insensitive(v: impl Into<String>) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).ends_with_insensitive(v)
+        }
         /// Equal, ignoring case.
         pub fn equals_insensitive(v: impl Into<String>) -> ::lumen_orm::Filter {
             ::lumen_orm::col(COLUMN).equals_insensitive(v)
@@ -299,6 +307,14 @@ pub mod user {
         /// Ends with the text.
         pub fn ends_with(v: impl Into<String>) -> ::lumen_orm::Filter {
             ::lumen_orm::col(COLUMN).ends_with(v)
+        }
+        /// Starts with the text, ignoring case.
+        pub fn starts_with_insensitive(v: impl Into<String>) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).starts_with_insensitive(v)
+        }
+        /// Ends with the text, ignoring case.
+        pub fn ends_with_insensitive(v: impl Into<String>) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).ends_with_insensitive(v)
         }
         /// Equal, ignoring case.
         pub fn equals_insensitive(v: impl Into<String>) -> ::lumen_orm::Filter {
@@ -456,6 +472,49 @@ pub mod user {
         /// Largest first.
         pub fn desc() -> (String, ::lumen_orm::Order) {
             (COLUMN.to_owned(), ::lumen_orm::Order::Desc)
+        }
+    }
+    /// Conditions on the related `Post` records of `posts`, built with `post::..` filters.
+    pub mod posts {
+        fn related() -> ::lumen_orm::Related {
+            ::lumen_orm::Related::new(super::super::post::table(), &[("authorId", "id")])
+        }
+        /// At least one related record matches `f`.
+        pub fn some(f: ::lumen_orm::Filter) -> ::lumen_orm::Filter {
+            related().some(f)
+        }
+        /// Every related record matches `f` (true when there are none, as in Prisma).
+        pub fn every(f: ::lumen_orm::Filter) -> ::lumen_orm::Filter {
+            related().every(f)
+        }
+        /// No related record matches `f`.
+        pub fn none(f: ::lumen_orm::Filter) -> ::lumen_orm::Filter {
+            related().none(f)
+        }
+    }
+    /// Conditions on the related `Profile` records of `profile`, built with `profile::..` filters.
+    pub mod profile {
+        fn related() -> ::lumen_orm::Related {
+            ::lumen_orm::Related::new(
+                super::super::profile::table(),
+                &[("userId", "id")],
+            )
+        }
+        /// The related record exists and matches `f`.
+        pub fn is(f: ::lumen_orm::Filter) -> ::lumen_orm::Filter {
+            related().is(f)
+        }
+        /// There is no related record, or it does not match `f`.
+        pub fn is_not(f: ::lumen_orm::Filter) -> ::lumen_orm::Filter {
+            related().is_not(f)
+        }
+        /// There is no related record (Prisma's `is: null`).
+        pub fn is_null() -> ::lumen_orm::Filter {
+            related().is_null()
+        }
+        /// There is a related record (Prisma's `isNot: null`).
+        pub fn is_not_null() -> ::lumen_orm::Filter {
+            related().is_not_null()
         }
     }
     /// The data for a new record. Fields the database fills (ids, defaults) are `Option`.
@@ -1131,6 +1190,14 @@ pub mod profile {
         pub fn ends_with(v: impl Into<String>) -> ::lumen_orm::Filter {
             ::lumen_orm::col(COLUMN).ends_with(v)
         }
+        /// Starts with the text, ignoring case.
+        pub fn starts_with_insensitive(v: impl Into<String>) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).starts_with_insensitive(v)
+        }
+        /// Ends with the text, ignoring case.
+        pub fn ends_with_insensitive(v: impl Into<String>) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).ends_with_insensitive(v)
+        }
         /// Equal, ignoring case.
         pub fn equals_insensitive(v: impl Into<String>) -> ::lumen_orm::Filter {
             ::lumen_orm::col(COLUMN).equals_insensitive(v)
@@ -1189,6 +1256,20 @@ pub mod profile {
         /// Largest first.
         pub fn desc() -> (String, ::lumen_orm::Order) {
             (COLUMN.to_owned(), ::lumen_orm::Order::Desc)
+        }
+    }
+    /// Conditions on the related `User` records of `user`, built with `user::..` filters.
+    pub mod user {
+        fn related() -> ::lumen_orm::Related {
+            ::lumen_orm::Related::new(super::super::user::table(), &[("id", "userId")])
+        }
+        /// The related record exists and matches `f`.
+        pub fn is(f: ::lumen_orm::Filter) -> ::lumen_orm::Filter {
+            related().is(f)
+        }
+        /// There is no related record, or it does not match `f`.
+        pub fn is_not(f: ::lumen_orm::Filter) -> ::lumen_orm::Filter {
+            related().is_not(f)
         }
     }
     /// The data for a new record. Fields the database fills (ids, defaults) are `Option`.
@@ -1748,6 +1829,14 @@ pub mod post {
         pub fn ends_with(v: impl Into<String>) -> ::lumen_orm::Filter {
             ::lumen_orm::col(COLUMN).ends_with(v)
         }
+        /// Starts with the text, ignoring case.
+        pub fn starts_with_insensitive(v: impl Into<String>) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).starts_with_insensitive(v)
+        }
+        /// Ends with the text, ignoring case.
+        pub fn ends_with_insensitive(v: impl Into<String>) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).ends_with_insensitive(v)
+        }
         /// Equal, ignoring case.
         pub fn equals_insensitive(v: impl Into<String>) -> ::lumen_orm::Filter {
             ::lumen_orm::col(COLUMN).equals_insensitive(v)
@@ -1814,6 +1903,14 @@ pub mod post {
         /// Ends with the text.
         pub fn ends_with(v: impl Into<String>) -> ::lumen_orm::Filter {
             ::lumen_orm::col(COLUMN).ends_with(v)
+        }
+        /// Starts with the text, ignoring case.
+        pub fn starts_with_insensitive(v: impl Into<String>) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).starts_with_insensitive(v)
+        }
+        /// Ends with the text, ignoring case.
+        pub fn ends_with_insensitive(v: impl Into<String>) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).ends_with_insensitive(v)
         }
         /// Equal, ignoring case.
         pub fn equals_insensitive(v: impl Into<String>) -> ::lumen_orm::Filter {
@@ -1959,6 +2056,46 @@ pub mod post {
         /// Largest first.
         pub fn desc() -> (String, ::lumen_orm::Order) {
             (COLUMN.to_owned(), ::lumen_orm::Order::Desc)
+        }
+    }
+    /// Conditions on the related `User` records of `author`, built with `user::..` filters.
+    pub mod author {
+        fn related() -> ::lumen_orm::Related {
+            ::lumen_orm::Related::new(super::super::user::table(), &[("id", "authorId")])
+        }
+        /// The related record exists and matches `f`.
+        pub fn is(f: ::lumen_orm::Filter) -> ::lumen_orm::Filter {
+            related().is(f)
+        }
+        /// There is no related record, or it does not match `f`.
+        pub fn is_not(f: ::lumen_orm::Filter) -> ::lumen_orm::Filter {
+            related().is_not(f)
+        }
+    }
+    /// Conditions on the related `Tag` records of `tags`, built with `tag::..` filters.
+    pub mod tags {
+        fn related() -> ::lumen_orm::Related {
+            ::lumen_orm::Related::through(
+                super::super::tag::table(),
+                ::lumen_orm::Table {
+                    schema: None,
+                    name: "_PostToTag".to_owned(),
+                },
+                &[("A", "id")],
+                &[("B", "name")],
+            )
+        }
+        /// At least one related record matches `f`.
+        pub fn some(f: ::lumen_orm::Filter) -> ::lumen_orm::Filter {
+            related().some(f)
+        }
+        /// Every related record matches `f` (true when there are none, as in Prisma).
+        pub fn every(f: ::lumen_orm::Filter) -> ::lumen_orm::Filter {
+            related().every(f)
+        }
+        /// No related record matches `f`.
+        pub fn none(f: ::lumen_orm::Filter) -> ::lumen_orm::Filter {
+            related().none(f)
         }
     }
     /// The data for a new record. Fields the database fills (ids, defaults) are `Option`.
@@ -2488,6 +2625,14 @@ pub mod tag {
         pub fn ends_with(v: impl Into<String>) -> ::lumen_orm::Filter {
             ::lumen_orm::col(COLUMN).ends_with(v)
         }
+        /// Starts with the text, ignoring case.
+        pub fn starts_with_insensitive(v: impl Into<String>) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).starts_with_insensitive(v)
+        }
+        /// Ends with the text, ignoring case.
+        pub fn ends_with_insensitive(v: impl Into<String>) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).ends_with_insensitive(v)
+        }
         /// Equal, ignoring case.
         pub fn equals_insensitive(v: impl Into<String>) -> ::lumen_orm::Filter {
             ::lumen_orm::col(COLUMN).equals_insensitive(v)
@@ -2499,6 +2644,32 @@ pub mod tag {
         /// Largest first.
         pub fn desc() -> (String, ::lumen_orm::Order) {
             (COLUMN.to_owned(), ::lumen_orm::Order::Desc)
+        }
+    }
+    /// Conditions on the related `Post` records of `posts`, built with `post::..` filters.
+    pub mod posts {
+        fn related() -> ::lumen_orm::Related {
+            ::lumen_orm::Related::through(
+                super::super::post::table(),
+                ::lumen_orm::Table {
+                    schema: None,
+                    name: "_PostToTag".to_owned(),
+                },
+                &[("B", "name")],
+                &[("A", "id")],
+            )
+        }
+        /// At least one related record matches `f`.
+        pub fn some(f: ::lumen_orm::Filter) -> ::lumen_orm::Filter {
+            related().some(f)
+        }
+        /// Every related record matches `f` (true when there are none, as in Prisma).
+        pub fn every(f: ::lumen_orm::Filter) -> ::lumen_orm::Filter {
+            related().every(f)
+        }
+        /// No related record matches `f`.
+        pub fn none(f: ::lumen_orm::Filter) -> ::lumen_orm::Filter {
+            related().none(f)
         }
     }
     /// The data for a new record. Fields the database fills (ids, defaults) are `Option`.

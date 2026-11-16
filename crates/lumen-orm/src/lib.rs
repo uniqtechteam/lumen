@@ -31,7 +31,7 @@ mod value;
 
 pub use db::{Db, Isolation, Run, Tx};
 pub use error::{Error, ErrorInfo, Result};
-pub use filter::{Col, Filter, Mode, Op, col};
+pub use filter::{Col, Filter, Link, Mode, Op, Quantifier, Related, col};
 pub use query::{Built, Delete, Insert, OnConflict, Order, Select, Table, Update, ident};
 pub use value::{Set, Value};
 
