@@ -1228,11 +1228,11 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5d15f86d12da44cd8d4ec3c73984537eb7f4cadcb9776a575a0a8a05ca11005c"
 
 [[package]]
-name = "lumen-cli"
-version = "0.1.0-dev"
+name = "lumen-db-cli"
+version = "0.1.0"
 dependencies = [
  "clap",
- "lumen-codegen",
+ "lumen-db-codegen",
  "lumen-migrate",
  "lumen-schema",
  "mongodb",
@@ -1242,8 +1242,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "lumen-codegen"
-version = "0.1.0-dev"
+name = "lumen-db-codegen"
+version = "0.1.0"
 dependencies = [
  "lumen-migrate",
  "lumen-orm",
@@ -1259,7 +1259,7 @@ dependencies = [
 
 [[package]]
 name = "lumen-migrate"
-version = "0.1.0-dev"
+version = "0.1.0"
 dependencies = [
  "lumen-schema",
  "mongodb",
@@ -1272,7 +1272,7 @@ dependencies = [
 
 [[package]]
 name = "lumen-orm"
-version = "0.1.0-dev"
+version = "0.1.0"
 dependencies = [
  "chrono",
  "lumen-orm",
@@ -1287,7 +1287,7 @@ dependencies = [
 
 [[package]]
 name = "lumen-schema"
-version = "0.1.0-dev"
+version = "0.1.0"
 
 [[package]]
 name = "macro_magic"

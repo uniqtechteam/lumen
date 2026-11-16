@@ -6,9 +6,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+This will be 0.1.0. Some planned work moved to 0.2: aggregates and `groupBy`, cursor pagination
+and ordering by relation count, a `select` builder and `utoipa` schemas in the generated client,
+many-to-many and nested includes in the generated client, `generate --watch`, `db pull` for
+Postgres, the `time` crate option, and testing on more Postgres versions and on macOS and Windows.
+The README's Limits section has the full list.
+
+The code generator and the command line crates are published as `lumen-db-codegen` and
+`lumen-db-cli`, because `lumen-codegen` and `lumen-cli` were taken on crates.io. The command is
+still `lumen`.
+
 ### Added
 
-- Project setup: the `lumen-orm`, `lumen-schema`, `lumen-migrate`, `lumen-codegen` and `lumen-cli` crates,
+- Project setup: the `lumen-orm`, `lumen-schema`, `lumen-migrate`, `lumen-db-codegen` and `lumen-db-cli` crates,
   and CI that tests against Postgres 16 and MongoDB 7.
 - `lumen_schema::parse`: reads `schema.prisma` files (models, views, composite types, enums,
   datasource and generator blocks, field types with `?`/`[]`/`Unsupported("..")`, `@` and `@@`
@@ -54,7 +64,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - Transactions: `db.transaction(async |tx| ..)` commits on `Ok` and rolls back on `Err`; nested
   `tx.transaction(..)` uses a savepoint; `transaction_with(Isolation::Serializable, ..)`. The `Run`
   trait lets the same code work on the pool and in a transaction. `db.statements()` counts statements.
-- `lumen_codegen::generate`: the type-safe client as one plain Rust file. Per model: the record
+- `lumen_db_codegen::generate`: the type-safe client as one plain Rust file. Per model: the record
   (serde, hand-written row decoding, no derive macros needed in your crate), typed filter functions
   per field (`user::email::contains(..)`; a wrong value type does not compile), ordering,
   `Create` (required fields are plain fields) and `Update` (`Set::To` / `Set::NotSet`) inputs,
@@ -104,6 +114,24 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - `bench/`: `include_posts()` against a query per user (statements and median time) with the
   script that draws `docs/img/includes.svg`.
 
+- Nested writes: `create_nested(data, Nested { .. })` creates a record and creates or connects
+  related records, and `create_with_<relation>(data, One::Create | One::Connect)` creates a record
+  under a related record it creates or finds first. Each call is one transaction (a savepoint
+  inside one) on Postgres and MongoDB, and a missing connect target is P2025. The generated client
+  has `CreateWithout<Relation>` inputs for the nested side.
+- Relation filters: `some`, `every` and `none` on to-many relations, `is` and `is_not` on to-one
+  relations (plus `is_null` and `is_not_null` when the relation is optional). They nest and mean
+  what they mean in Prisma. Postgres uses `EXISTS` subqueries; MongoDB resolves each relation
+  filter with one aggregation first.
+- `starts_with_insensitive` and `ends_with_insensitive`, in `lumen-orm` and the generated client.
+- `skip` and `take` inside an include page each parent's rows, in SQL with a window function and
+  on MongoDB with `$setWindowFields`. Generated to-many includes have `skip()`.
+
 ### Fixed
 
+- MongoDB `db push` no longer drops indexes the schema does not have. It lists them and leaves
+  them alone, so an index made by hand survives; it only rebuilds an index the schema names when
+  its definition changed. `mongo::push` returns `MongoPush { steps, not_in_schema }`.
+- Paging a to-one include, or a negative `skip` or `take`, is now a P2009 error. Before, the value
+  was ignored without a word.
 - `lumen generate` prints the client's path as `src/db.rs` rather than `prisma/../src/db.rs`.

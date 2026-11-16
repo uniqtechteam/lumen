@@ -23,7 +23,7 @@ fn the_generated_mongo_client_is_current() {
     let (schema, d) = lumen_schema::check(&lumen_schema::SourceFile::new("mongo.prisma", text));
     assert!(!d.has_errors());
     assert_eq!(
-        lumen_codegen::generate(&schema, "mongo.prisma").unwrap(),
+        lumen_db_codegen::generate(&schema, "mongo.prisma").unwrap(),
         include_str!("generated/mongo.rs"),
         "tests/generated/mongo.rs is out of date: regenerate it with the gen example"
     );

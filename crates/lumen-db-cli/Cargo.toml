@@ -1,14 +1,17 @@
 [package]
-name = "lumen-cli"
+name = "lumen-db-cli"
 description = "The lumen command: init, format, validate, migrate, db push and generate."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
+homepage.workspace = true
+readme.workspace = true
 authors.workspace = true
 keywords.workspace = true
-categories.workspace = true
+categories = ["database", "command-line-utilities"]
+include = ["src/**/*", "LICENSE-*"]
 
 [[bin]]
 name = "lumen"
@@ -21,7 +24,7 @@ path = "src/main.rs"
 
 [dependencies]
 clap.workspace = true
-lumen-codegen.workspace = true
+lumen-db-codegen.workspace = true
 lumen-migrate.workspace = true
 lumen-schema.workspace = true
 mongodb.workspace = true

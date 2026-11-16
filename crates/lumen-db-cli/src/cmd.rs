@@ -184,7 +184,7 @@ pub fn generate(given: Option<&Path>, output: Option<&Path>) -> Result<ExitCode,
 fn write_client(path: &Path, schema: &Schema, output: Option<&Path>) -> Result<(), Fail> {
     let out = output_path(path, schema, output);
     let shown = path.display().to_string().replace('\\', "/");
-    let code = lumen_codegen::generate(schema, &shown)?;
+    let code = lumen_db_codegen::generate(schema, &shown)?;
     if let Some(dir) = out.parent().filter(|d| !d.as_os_str().is_empty()) {
         std::fs::create_dir_all(dir)
             .map_err(|e| format!("cannot create {}: {e}", dir.display()))?;

@@ -19,7 +19,7 @@ fn the_generated_uq_shape_client_is_current() {
     let (schema, d) = lumen_schema::check(&lumen_schema::SourceFile::new("uq_shape.prisma", text));
     assert!(!d.has_errors());
     assert_eq!(
-        lumen_codegen::generate(&schema, "uq_shape.prisma").unwrap(),
+        lumen_db_codegen::generate(&schema, "uq_shape.prisma").unwrap(),
         include_str!("generated/uq_shape.rs"),
         "tests/generated/uq_shape.rs is out of date: regenerate it with the gen example"
     );
