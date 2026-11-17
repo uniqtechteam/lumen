@@ -302,3 +302,32 @@ fn mongodb_many_to_many_keeps_id_lists_on_both_sides() {
         "an implicit many-to-many relation cannot have `fields` or `references`"
     );
 }
+
+#[test]
+fn a_single_field_needs_no_brackets() {
+    let s = ok(
+        "schema.prisma",
+        &format!(
+            "{PG}model User {{\n  id    Int    @id\n  email String\n  posts Post[]\n\n  @@index(email)\n  @@unique(email, map: \"email_key\")\n}}\n\nmodel Post {{\n  id       Int  @id\n  authorId Int\n  author   User @relation(fields: authorId, references: id)\n}}\n"
+        ),
+    );
+    let (_, user) = s.model("User").unwrap();
+    let kinds: Vec<(IndexKind, usize)> = user
+        .indexes
+        .iter()
+        .map(|i| (i.kind, i.fields[0].field))
+        .collect();
+    assert_eq!(
+        kinds,
+        [
+            (IndexKind::PrimaryKey, 0),
+            (IndexKind::Normal, 1),
+            (IndexKind::Unique, 1)
+        ]
+    );
+    let posts = s.relations.iter().find(|r| r.name == "PostToUser").unwrap();
+    assert_eq!(
+        (posts.fields.as_slice(), posts.references.as_slice()),
+        (&[1][..], &[0][..])
+    );
+}
