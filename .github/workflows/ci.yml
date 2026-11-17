@@ -24,25 +24,18 @@ jobs:
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
 
-  test:
-    name: test (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
+  # Every database test on Linux, once per supported Postgres version: Postgres in a service
+  # container, a one-node MongoDB 7 replica set (for transactions) and the real Prisma CLI.
+  databases:
+    name: Linux, Postgres ${{ matrix.postgres }}, MongoDB 7, Prisma CLI
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      - run: cargo test --workspace
-
-  databases:
-    name: test with Postgres 16, MongoDB 7 and the Prisma CLI
-    runs-on: ubuntu-latest
+        postgres: ["13", "14", "15", "16", "17"]
     services:
       postgres:
-        image: postgres:16
+        image: postgres:${{ matrix.postgres }}
         env:
           POSTGRES_PASSWORD: lumen
           POSTGRES_DB: lumen
@@ -52,11 +45,10 @@ jobs:
     env:
       LUMEN_TEST_POSTGRES_URL: postgres://postgres:lumen@localhost:5432/lumen
       LUMEN_TEST_MONGO_URL: mongodb://localhost:27017/?directConnection=true
-      # migrations are also checked against the real Prisma CLI (tests/prisma_interop.rs)
+      # migrations are also checked against the real Prisma CLI (prisma_interop.rs, corpus.rs)
       LUMEN_TEST_PRISMA: "1"
     steps:
       - uses: actions/checkout@v4
-      # a one-node replica set, so MongoDB transactions can be tested
       - name: start MongoDB 7 as a replica set
         run: |
           docker run -d --name mongo -p 27017:27017 mongo:7 --replSet rs0 --bind_ip_all
@@ -66,6 +58,52 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: databases
+          save-if: ${{ matrix.postgres == '17' }}
+      - run: cargo test --workspace -- --nocapture
+
+  # macOS and Windows runners have no service containers, so Postgres 17 is installed on the
+  # runner itself. MongoDB and the Prisma CLI stay on Linux: the MongoDB tests need a replica set
+  # in Docker, which these runners do not have, and neither test depends on the OS.
+  postgres-macos:
+    name: macOS, Postgres 17
+    runs-on: macos-latest
+    env:
+      LUMEN_TEST_POSTGRES_URL: postgres://postgres:lumen@localhost:5432/lumen
+    steps:
+      - uses: actions/checkout@v4
+      - name: install and start Postgres 17
+        run: |
+          brew install postgresql@17
+          PG="$(brew --prefix postgresql@17)/bin"
+          brew services start postgresql@17
+          for i in $(seq 1 30); do "$PG/pg_isready" -h localhost && break; sleep 2; done
+          "$PG/createuser" -h localhost -s postgres
+          "$PG/psql" -h localhost -d postgres -c "ALTER USER postgres PASSWORD 'lumen'"
+          "$PG/createdb" -h localhost -O postgres lumen
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test --workspace -- --nocapture
+
+  postgres-windows:
+    name: Windows, Postgres 17
+    runs-on: windows-latest
+    env:
+      # the runner image's PostgreSQL service: user postgres, password root
+      LUMEN_TEST_POSTGRES_URL: postgres://postgres:root@localhost:5432/lumen
+    steps:
+      - uses: actions/checkout@v4
+      - name: start the preinstalled Postgres
+        shell: pwsh
+        run: |
+          $service = Get-Service -Name postgresql*
+          Set-Service -InputObject $service -Status Running -StartupType Automatic
+          & "$env:PGBIN\pg_isready.exe" -h localhost -t 60
+          & "$env:PGBIN\psql.exe" -h localhost -U postgres -c "SELECT version()"
+          & "$env:PGBIN\createdb.exe" -h localhost -U postgres lumen
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: cargo test --workspace -- --nocapture
