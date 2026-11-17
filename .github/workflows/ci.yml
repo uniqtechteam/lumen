@@ -114,3 +114,37 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: EmbarkStudios/cargo-deny-action@v2
+
+  # Dates are `time` types by default; `chrono` is an opt-in feature of lumen-orm. This job builds
+  # and tests the `chrono` side (alone and together with `time`) against Postgres and MongoDB.
+  chrono:
+    name: chrono feature
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: lumen
+          POSTGRES_DB: lumen
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      LUMEN_TEST_POSTGRES_URL: postgres://postgres:lumen@localhost:5432/lumen
+      LUMEN_TEST_MONGO_URL: mongodb://localhost:27017/?directConnection=true
+    steps:
+      - uses: actions/checkout@v4
+      - name: start MongoDB 7 as a replica set
+        run: |
+          docker run -d --name mongo -p 27017:27017 mongo:7 --replSet rs0 --bind_ip_all
+          for i in $(seq 1 30); do docker exec mongo mongosh --quiet --eval 'db.runCommand({ ping: 1 }).ok' && break; sleep 2; done
+          docker exec mongo mongosh --quiet --eval 'rs.initiate({ _id: "rs0", members: [{ _id: 0, host: "localhost:27017" }] })'
+          for i in $(seq 1 30); do docker exec mongo mongosh --quiet --eval 'db.hello().isWritablePrimary' | grep -q true && break; sleep 2; done
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+      - run: cargo clippy -p lumen-orm --all-targets --no-default-features --features chrono,mongodb -- -D warnings
+      - run: cargo test -p lumen-orm --no-default-features --features chrono,mongodb
+      - run: cargo test --workspace --features lumen-orm/chrono
