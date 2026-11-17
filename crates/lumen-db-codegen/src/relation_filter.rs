@@ -132,7 +132,7 @@ pub(crate) fn modules(schema: &Schema, model_id: ModelId, mongo: bool) -> Vec<To
             quote! {
                 /// At least one related record matches `f`.
                 pub fn some(f: ::lumen_orm::Filter) -> ::lumen_orm::Filter { related().some(f) }
-                /// Every related record matches `f` (true when there are none, as in Prisma).
+                /// Every related record matches `f` (true when there are none).
                 pub fn every(f: ::lumen_orm::Filter) -> ::lumen_orm::Filter { related().every(f) }
                 /// No related record matches `f`.
                 pub fn none(f: ::lumen_orm::Filter) -> ::lumen_orm::Filter { related().none(f) }
@@ -140,9 +140,9 @@ pub(crate) fn modules(schema: &Schema, model_id: ModelId, mongo: bool) -> Vec<To
         } else {
             let optional = (f.arity == Arity::Optional).then(|| {
                 quote! {
-                    /// There is no related record (Prisma's `is: null`).
+                    /// There is no related record.
                     pub fn is_null() -> ::lumen_orm::Filter { related().is_null() }
-                    /// There is a related record (Prisma's `isNot: null`).
+                    /// There is a related record.
                     pub fn is_not_null() -> ::lumen_orm::Filter { related().is_not_null() }
                 }
             });

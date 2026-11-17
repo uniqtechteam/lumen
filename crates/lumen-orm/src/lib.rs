@@ -1,5 +1,5 @@
 //! lumen's runtime: the query builder, relations and transactions that the generated client
-//! calls. Apps may use it directly for dynamic queries, SeaORM style:
+//! calls. Apps may also use it directly for dynamic queries:
 //!
 //! ```no_run
 //! use lumen_orm::{Db, Order, Select, Table, col};

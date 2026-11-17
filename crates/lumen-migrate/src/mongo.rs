@@ -1,4 +1,4 @@
-//! MongoDB: `db push` instead of migration files, as in Prisma. Only collections and indexes are
+//! MongoDB: `db push` instead of migration files. Only collections and indexes are
 //! managed. Collections are created and never dropped. Indexes the schema has are created, and
 //! dropped and created again when their definition in the schema changes (the schema names them,
 //! so they are lumen's). An index the schema does not have is never dropped: it may be one a
@@ -74,7 +74,7 @@ fn cut(name: String) -> String {
     name[..end].to_owned()
 }
 
-/// The collections and indexes `schema` asks for, with Prisma's index names.
+/// The collections and indexes `schema` asks for, with the index names the schema implies.
 #[must_use]
 pub fn calculate(schema: &Schema) -> Vec<MongoCollection> {
     let mut out: Vec<MongoCollection> = schema

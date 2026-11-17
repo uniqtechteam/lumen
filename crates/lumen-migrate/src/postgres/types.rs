@@ -11,7 +11,7 @@ fn precision(args: &[u32]) -> String {
     }
 }
 
-/// The type `format_type()` prints for a scalar with an optional `@db.X`. Prisma's defaults:
+/// The type `format_type()` prints for a scalar with an optional `@db.X`. The defaults:
 /// `text`, `integer`, `bigint`, `double precision`, `numeric(65,30)`, `boolean`,
 /// `timestamp(3) without time zone`, `jsonb`, `bytea`.
 #[must_use]

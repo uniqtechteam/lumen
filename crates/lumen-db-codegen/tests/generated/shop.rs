@@ -67,7 +67,7 @@ pub mod product {
         pub fn equals(v: ::lumen_orm::uuid::Uuid) -> ::lumen_orm::Filter {
             ::lumen_orm::col(COLUMN).equals(::lumen_orm::Value::from(v))
         }
-        /// Not equal to `v` (rows where it is NULL match too, as in Prisma).
+        /// Not equal to `v` (rows where it is NULL match too).
         pub fn not(v: ::lumen_orm::uuid::Uuid) -> ::lumen_orm::Filter {
             ::lumen_orm::col(COLUMN).not_equals(::lumen_orm::Value::from(v))
         }
@@ -118,7 +118,7 @@ pub mod product {
         pub fn equals(v: impl Into<String>) -> ::lumen_orm::Filter {
             ::lumen_orm::col(COLUMN).equals(::lumen_orm::Value::from(v.into()))
         }
-        /// Not equal to `v` (rows where it is NULL match too, as in Prisma).
+        /// Not equal to `v` (rows where it is NULL match too).
         pub fn not(v: impl Into<String>) -> ::lumen_orm::Filter {
             ::lumen_orm::col(COLUMN).not_equals(::lumen_orm::Value::from(v.into()))
         }
@@ -193,7 +193,7 @@ pub mod product {
         pub fn equals(v: ::lumen_orm::rust_decimal::Decimal) -> ::lumen_orm::Filter {
             ::lumen_orm::col(COLUMN).equals(::lumen_orm::Value::from(v))
         }
-        /// Not equal to `v` (rows where it is NULL match too, as in Prisma).
+        /// Not equal to `v` (rows where it is NULL match too).
         pub fn not(v: ::lumen_orm::rust_decimal::Decimal) -> ::lumen_orm::Filter {
             ::lumen_orm::col(COLUMN).not_equals(::lumen_orm::Value::from(v))
         }
@@ -244,7 +244,7 @@ pub mod product {
         pub fn equals(v: ::lumen_orm::serde_json::Value) -> ::lumen_orm::Filter {
             ::lumen_orm::col(COLUMN).equals(::lumen_orm::Value::from(v))
         }
-        /// Not equal to `v` (rows where it is NULL match too, as in Prisma).
+        /// Not equal to `v` (rows where it is NULL match too).
         pub fn not(v: ::lumen_orm::serde_json::Value) -> ::lumen_orm::Filter {
             ::lumen_orm::col(COLUMN).not_equals(::lumen_orm::Value::from(v))
         }
@@ -279,7 +279,7 @@ pub mod product {
         pub fn equals(v: Vec<u8>) -> ::lumen_orm::Filter {
             ::lumen_orm::col(COLUMN).equals(::lumen_orm::Value::from(v))
         }
-        /// Not equal to `v` (rows where it is NULL match too, as in Prisma).
+        /// Not equal to `v` (rows where it is NULL match too).
         pub fn not(v: Vec<u8>) -> ::lumen_orm::Filter {
             ::lumen_orm::col(COLUMN).not_equals(::lumen_orm::Value::from(v))
         }
@@ -318,7 +318,7 @@ pub mod product {
         pub fn equals(v: bool) -> ::lumen_orm::Filter {
             ::lumen_orm::col(COLUMN).equals(::lumen_orm::Value::from(v))
         }
-        /// Not equal to `v` (rows where it is NULL match too, as in Prisma).
+        /// Not equal to `v` (rows where it is NULL match too).
         pub fn not(v: bool) -> ::lumen_orm::Filter {
             ::lumen_orm::col(COLUMN).not_equals(::lumen_orm::Value::from(v))
         }
@@ -353,7 +353,7 @@ pub mod product {
         pub fn some(f: ::lumen_orm::Filter) -> ::lumen_orm::Filter {
             related().some(f)
         }
-        /// Every related record matches `f` (true when there are none, as in Prisma).
+        /// Every related record matches `f` (true when there are none).
         pub fn every(f: ::lumen_orm::Filter) -> ::lumen_orm::Filter {
             related().every(f)
         }
@@ -910,7 +910,7 @@ pub mod order {
         pub fn equals(v: i32) -> ::lumen_orm::Filter {
             ::lumen_orm::col(COLUMN).equals(::lumen_orm::Value::from(v))
         }
-        /// Not equal to `v` (rows where it is NULL match too, as in Prisma).
+        /// Not equal to `v` (rows where it is NULL match too).
         pub fn not(v: i32) -> ::lumen_orm::Filter {
             ::lumen_orm::col(COLUMN).not_equals(::lumen_orm::Value::from(v))
         }
@@ -961,7 +961,7 @@ pub mod order {
         pub fn some(f: ::lumen_orm::Filter) -> ::lumen_orm::Filter {
             related().some(f)
         }
-        /// Every related record matches `f` (true when there are none, as in Prisma).
+        /// Every related record matches `f` (true when there are none).
         pub fn every(f: ::lumen_orm::Filter) -> ::lumen_orm::Filter {
             related().every(f)
         }
@@ -1479,7 +1479,7 @@ pub mod order_line {
         pub fn equals(v: i32) -> ::lumen_orm::Filter {
             ::lumen_orm::col(COLUMN).equals(::lumen_orm::Value::from(v))
         }
-        /// Not equal to `v` (rows where it is NULL match too, as in Prisma).
+        /// Not equal to `v` (rows where it is NULL match too).
         pub fn not(v: i32) -> ::lumen_orm::Filter {
             ::lumen_orm::col(COLUMN).not_equals(::lumen_orm::Value::from(v))
         }
@@ -1526,7 +1526,7 @@ pub mod order_line {
         pub fn equals(v: ::lumen_orm::uuid::Uuid) -> ::lumen_orm::Filter {
             ::lumen_orm::col(COLUMN).equals(::lumen_orm::Value::from(v))
         }
-        /// Not equal to `v` (rows where it is NULL match too, as in Prisma).
+        /// Not equal to `v` (rows where it is NULL match too).
         pub fn not(v: ::lumen_orm::uuid::Uuid) -> ::lumen_orm::Filter {
             ::lumen_orm::col(COLUMN).not_equals(::lumen_orm::Value::from(v))
         }
@@ -1577,7 +1577,7 @@ pub mod order_line {
         pub fn equals(v: i32) -> ::lumen_orm::Filter {
             ::lumen_orm::col(COLUMN).equals(::lumen_orm::Value::from(v))
         }
-        /// Not equal to `v` (rows where it is NULL match too, as in Prisma).
+        /// Not equal to `v` (rows where it is NULL match too).
         pub fn not(v: i32) -> ::lumen_orm::Filter {
             ::lumen_orm::col(COLUMN).not_equals(::lumen_orm::Value::from(v))
         }

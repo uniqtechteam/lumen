@@ -1,4 +1,4 @@
-//! Generates the type-safe Rust client from a `schema.prisma` file: one plain, readable Rust file,
+//! Generates the type-safe Rust client from the lumen schema file: one plain, readable Rust file,
 //! no macros to learn. Wrong field names and wrong value types fail at compile time.
 //!
 //! ```

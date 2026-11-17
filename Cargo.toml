@@ -17,7 +17,7 @@ repository = "https://github.com/uniqtechteam/lumen"
 homepage = "https://github.com/uniqtechteam/lumen"
 readme = "README.md"
 authors = ["UniqTech <https://uniqtech.dev>"]
-keywords = ["orm", "database", "prisma", "postgres", "mongodb"]
+keywords = ["orm", "database", "migrations", "postgres", "mongodb"]
 categories = ["database"]
 
 [workspace.dependencies]

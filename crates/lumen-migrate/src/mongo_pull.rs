@@ -1,5 +1,4 @@
-//! `db pull` for MongoDB: sample up to 1000 documents per collection and suggest a schema, the
-//! way Prisma does. A field missing or null in any sampled document is optional; a field with
+//! `db pull` for MongoDB: sample up to 1000 documents per collection and suggest a schema. A field missing or null in any sampled document is optional; a field with
 //! several types gets the most common one and a comment; nested documents become composite types.
 
 use std::collections::BTreeMap;
@@ -244,7 +243,7 @@ async fn indexes(
     Ok((uniques, blocks))
 }
 
-/// A suggested `schema.prisma` for the database, formatted.
+/// A suggested schema file for the database, formatted.
 ///
 /// # Errors
 /// When the server cannot be read.

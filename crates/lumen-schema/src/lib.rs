@@ -1,4 +1,4 @@
-//! Reads, checks and formats `schema.prisma` files.
+//! Reads, checks and formats lumen schema files (`schema.prisma`).
 //!
 //! ```
 //! use lumen_schema::{SourceFile, parse};
@@ -39,7 +39,7 @@ pub fn check(file: &SourceFile) -> (checked::Schema, Diagnostics) {
     (schema, diagnostics)
 }
 
-/// The file in lumen's canonical layout (the same as Prisma's). Formatting never fails: broken
+/// The file in lumen's canonical layout. Formatting never fails: broken
 /// lines are kept as written, and problems found while reading go into the diagnostics.
 #[must_use]
 pub fn format(file: &SourceFile) -> (String, Diagnostics) {

@@ -1,4 +1,4 @@
-//! `lumen`: a Prisma-style schema, migrations and client for Rust.
+//! `lumen`: one schema file, migrations and a type-safe client for Rust.
 
 mod cmd;
 mod project;
@@ -8,7 +8,7 @@ use std::process::ExitCode;
 
 use clap::{Parser, Subcommand, ValueEnum};
 
-/// A Prisma-style schema, migrations and a type-safe client for Rust.
+/// One schema file, migrations and a type-safe client for Rust.
 #[derive(Parser)]
 #[command(name = "lumen", version, about)]
 struct Cli {

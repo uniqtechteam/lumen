@@ -57,7 +57,7 @@ pub mod note {
         pub fn equals(v: impl Into<String>) -> ::lumen_orm::Filter {
             ::lumen_orm::col(COLUMN).equals(::lumen_orm::Value::from(v.into()))
         }
-        /// Not equal to `v` (rows where it is NULL match too, as in Prisma).
+        /// Not equal to `v` (rows where it is NULL match too).
         pub fn not(v: impl Into<String>) -> ::lumen_orm::Filter {
             ::lumen_orm::col(COLUMN).not_equals(::lumen_orm::Value::from(v.into()))
         }
@@ -132,7 +132,7 @@ pub mod note {
         pub fn equals(v: impl Into<String>) -> ::lumen_orm::Filter {
             ::lumen_orm::col(COLUMN).equals(::lumen_orm::Value::from(v.into()))
         }
-        /// Not equal to `v` (rows where it is NULL match too, as in Prisma).
+        /// Not equal to `v` (rows where it is NULL match too).
         pub fn not(v: impl Into<String>) -> ::lumen_orm::Filter {
             ::lumen_orm::col(COLUMN).not_equals(::lumen_orm::Value::from(v.into()))
         }
@@ -215,7 +215,7 @@ pub mod note {
         pub fn equals(v: impl Into<String>) -> ::lumen_orm::Filter {
             ::lumen_orm::col(COLUMN).equals(::lumen_orm::Value::from(v.into()))
         }
-        /// Not equal to `v` (rows where it is NULL match too, as in Prisma).
+        /// Not equal to `v` (rows where it is NULL match too).
         pub fn not(v: impl Into<String>) -> ::lumen_orm::Filter {
             ::lumen_orm::col(COLUMN).not_equals(::lumen_orm::Value::from(v.into()))
         }
@@ -298,7 +298,7 @@ pub mod note {
         pub fn equals(v: impl Into<String>) -> ::lumen_orm::Filter {
             ::lumen_orm::col(COLUMN).equals(::lumen_orm::Value::from(v.into()))
         }
-        /// Not equal to `v` (rows where it is NULL match too, as in Prisma).
+        /// Not equal to `v` (rows where it is NULL match too).
         pub fn not(v: impl Into<String>) -> ::lumen_orm::Filter {
             ::lumen_orm::col(COLUMN).not_equals(::lumen_orm::Value::from(v.into()))
         }
@@ -373,7 +373,7 @@ pub mod note {
         pub fn equals(v: impl Into<String>) -> ::lumen_orm::Filter {
             ::lumen_orm::col(COLUMN).equals(::lumen_orm::Value::from(v.into()))
         }
-        /// Not equal to `v` (rows where it is NULL match too, as in Prisma).
+        /// Not equal to `v` (rows where it is NULL match too).
         pub fn not(v: impl Into<String>) -> ::lumen_orm::Filter {
             ::lumen_orm::col(COLUMN).not_equals(::lumen_orm::Value::from(v.into()))
         }
@@ -456,7 +456,7 @@ pub mod note {
         pub fn equals(v: ::lumen_orm::mongo::DateTime) -> ::lumen_orm::Filter {
             ::lumen_orm::col(COLUMN).equals(::lumen_orm::Value::from(v))
         }
-        /// Not equal to `v` (rows where it is NULL match too, as in Prisma).
+        /// Not equal to `v` (rows where it is NULL match too).
         pub fn not(v: ::lumen_orm::mongo::DateTime) -> ::lumen_orm::Filter {
             ::lumen_orm::col(COLUMN).not_equals(::lumen_orm::Value::from(v))
         }
@@ -507,7 +507,7 @@ pub mod note {
         pub fn equals(v: ::lumen_orm::mongo::DateTime) -> ::lumen_orm::Filter {
             ::lumen_orm::col(COLUMN).equals(::lumen_orm::Value::from(v))
         }
-        /// Not equal to `v` (rows where it is NULL match too, as in Prisma).
+        /// Not equal to `v` (rows where it is NULL match too).
         pub fn not(v: ::lumen_orm::mongo::DateTime) -> ::lumen_orm::Filter {
             ::lumen_orm::col(COLUMN).not_equals(::lumen_orm::Value::from(v))
         }
@@ -558,7 +558,7 @@ pub mod note {
         pub fn equals(v: ::lumen_orm::mongo::DateTime) -> ::lumen_orm::Filter {
             ::lumen_orm::col(COLUMN).equals(::lumen_orm::Value::from(v))
         }
-        /// Not equal to `v` (rows where it is NULL match too, as in Prisma).
+        /// Not equal to `v` (rows where it is NULL match too).
         pub fn not(v: ::lumen_orm::mongo::DateTime) -> ::lumen_orm::Filter {
             ::lumen_orm::col(COLUMN).not_equals(::lumen_orm::Value::from(v))
         }
