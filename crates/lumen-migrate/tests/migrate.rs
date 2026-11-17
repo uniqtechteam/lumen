@@ -422,3 +422,97 @@ async fn indexes_keys_and_actions_change() {
         m.sql
     );
 }
+
+const LISTS: &str = "enum Role {\n  ADMIN  @map(\"admin\")\n  READER\n}\n\nmodel Account {\n  id     Int      @id\n  role   Role     @default(ADMIN)\n  roles  Role[]   @default([ADMIN, READER])\n  tags   String[] @default([])\n  scopes String[] @default([\"openid\", \"read write\"])\n  ids    Int[]    @default([1, -2])\n  flags  Boolean[]\n}\n";
+
+#[test]
+fn list_columns_and_mapped_enum_defaults_are_calculated_as_prisma_does() {
+    let shape = calculate(&schema(LISTS));
+    let table = shape.table("public", "Account").unwrap();
+    let col = |name: &str| table.column(name).unwrap();
+    let lit = |s: &str| Some(lumen_migrate::shape::Default::Literal(s.into()));
+    assert_eq!(col("role").default, lit("'admin'"));
+    assert!(!col("role").nullable);
+    assert_eq!(col("roles").default, lit("'{admin,READER}'"));
+    assert_eq!(col("tags").default, lit("'{}'"));
+    assert_eq!(col("scopes").default, lit("'{openid,\"read write\"}'"));
+    assert_eq!(col("ids").default, lit("'{1,-2}'"));
+    // Prisma leaves list columns nullable, required or not
+    assert!(
+        ["roles", "tags", "scopes", "ids", "flags"]
+            .iter()
+            .all(|c| col(c).nullable)
+    );
+}
+
+#[tokio::test]
+async fn list_and_mapped_enum_defaults_survive_a_round_trip() {
+    let Some(m) = migrate(USER, "", &format!("{USER}{LISTS}")).await else {
+        return;
+    };
+    assert!(m.sql.contains("\"tags\" TEXT[] DEFAULT '{}'"), "{}", m.sql);
+    assert!(
+        m.sql.contains("\"role\" \"Role\" NOT NULL DEFAULT 'admin'"),
+        "{}",
+        m.sql
+    );
+}
+
+#[test]
+fn long_constraint_names_keep_their_suffix_as_prisma_does() {
+    // the names Prisma 6.19 gives this model (langfuse's billing_meter_backups)
+    let s = schema(
+        "model BillingMeterBackup {\n  stripeCustomerId String   @map(\"stripe_customer_id\")\n  meterId          String   @map(\"meter_id\")\n  startTime        DateTime @map(\"start_time\")\n  endTime          DateTime @map(\"end_time\")\n\n  @@unique([stripeCustomerId, meterId, startTime, endTime])\n  @@index([stripeCustomerId, meterId, startTime, endTime])\n  @@map(\"billing_meter_backups\")\n}\n",
+    );
+    let shape = calculate(&s);
+    let mut names: Vec<&str> = shape.tables[0]
+        .indexes
+        .iter()
+        .map(|i| i.name.as_str())
+        .collect();
+    names.sort_unstable();
+    assert_eq!(
+        names,
+        [
+            "billing_meter_backups_stripe_customer_id_meter_id_start_tim_idx",
+            "billing_meter_backups_stripe_customer_id_meter_id_start_tim_key",
+        ]
+    );
+}
+
+#[tokio::test]
+async fn negative_and_quoted_number_defaults_survive_a_round_trip() {
+    let b = format!(
+        "{USER}model Limits {{\n  id     Int     @id\n  delta  Int     @default(-2)\n  big    BigInt  @default(-3)\n  ratio  Float   @default(-1.5)\n  factor Decimal @default(\"2.00\") @db.Decimal(4, 2)\n}}\n"
+    );
+    let shape = calculate(&schema(&b));
+    let factor = shape
+        .table("public", "Limits")
+        .unwrap()
+        .column("factor")
+        .unwrap();
+    assert_eq!(
+        factor.default,
+        Some(lumen_migrate::shape::Default::Literal("2.00".into()))
+    );
+    // `migrate` checks the database reads back as the schema and a second diff is empty
+    let Some(m) = migrate(USER, "", &b).await else {
+        return;
+    };
+    assert!(
+        m.sql.contains("\"delta\" INTEGER NOT NULL DEFAULT -2"),
+        "{}",
+        m.sql
+    );
+}
+
+#[test]
+fn ignored_models_keep_their_tables() {
+    // `@@ignore` leaves a model out of the client; Prisma still creates and keeps its table
+    let shape = calculate(&schema(
+        "model Store {\n  key   String  @id\n  items Item[]\n\n  @@ignore\n}\n\nmodel Item {\n  id       Int    @id\n  storeKey String\n  store    Store  @relation(fields: [storeKey], references: [key])\n\n  @@ignore\n}\n",
+    ));
+    let names: Vec<&str> = shape.tables.iter().map(|t| t.name.as_str()).collect();
+    assert_eq!(names, ["Item", "Store"]);
+    assert_eq!(shape.tables[0].foreign_keys[0].name, "Item_storeKey_fkey");
+}

@@ -27,8 +27,10 @@ struct Side {
     span: Span,
 }
 
+/// `[a, b]`, or a single `a` without the brackets.
 fn names(expr: Option<&Expr>) -> Vec<(String, Span)> {
     match expr {
+        Some(Expr::Constant(c, s)) => vec![(c.clone(), *s)],
         Some(Expr::Array(items, _)) => items
             .iter()
             .filter_map(|e| match e {

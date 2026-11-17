@@ -59,3 +59,21 @@ fn a_broken_file_is_formatted_around_the_broken_line() {
         "model A {\n  id   Int    @id\n  ???\n  name String\n}\n"
     );
 }
+
+#[test]
+fn enum_values_line_up_their_attributes_once() {
+    let text = "enum Provider {\n  OPENAI @map(\"openai\")\n  GOOGLE_AI_STUDIO @map(\"google_ai_studio\")\n  XAI\n}\n";
+    assert_eq!(
+        fmt(text),
+        "enum Provider {\n  OPENAI           @map(\"openai\")\n  GOOGLE_AI_STUDIO @map(\"google_ai_studio\")\n  XAI\n}\n"
+    );
+}
+
+#[test]
+fn a_trailing_doc_comment_is_kept() {
+    let text = "model User {\n  id Int @id\n  name String? /// shown on posts\n}\n";
+    assert_eq!(
+        fmt(text),
+        "model User {\n  id   Int     @id\n  name String? /// shown on posts\n}\n"
+    );
+}

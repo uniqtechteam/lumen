@@ -18,11 +18,37 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   index name in `err.constraint`, as Postgres does. The generated client sets this up; with
   `lumen-orm` alone, pass the names to `MongoDb::with_constraints`.
 
+### Fixed
+
+- A `///` comment at the end of a field line no longer stops the schema from parsing. It joins
+  the field's documentation.
+- `@@index(email)`, `@@unique(email)` and `@relation(fields: authorId, references: id)` are
+  accepted without brackets around a single field.
+- `lumen format` no longer pads enum values with attributes twice, which pushed their `@map`
+  further right on every run.
+- List defaults such as `String[] @default([])` now produce SQL that runs, enum list defaults
+  get the type they need, and list defaults no longer show up as a change on every migration.
+- List columns are created nullable, so a database made from the same schema file by other tools
+  needs no change. Existing lumen databases get a one-time `DROP NOT NULL` on list columns.
+- An enum default uses the value's `@map` name, so `@default(ACTIVE)` with `ACTIVE @map("active")`
+  no longer fails on Postgres.
+- Negative number defaults, and number defaults written as strings (`@default("2.00")` on a
+  `Decimal`), no longer show up as a change on every migration.
+- Long index and constraint names keep their `_key`, `_idx`, `_fkey` or `_pkey` ending when
+  shortened to 63 bytes, so a unique constraint and an index on the same long column list no
+  longer get the same name.
+- Models with `@@ignore` keep their tables in migrations. The flag only leaves them out of the
+  generated client.
+
 ### Changed
 
 - `lumen_schema::checked::Relation` has two new fields, `b_fields` and `b_references`, for the
   second id list of a MongoDB many-to-many, and `lumen_orm::Link` a new `IdList` variant. Code
   that builds a `Relation` by hand or matches `Link` exhaustively needs to add them.
+
+- CI tests against Postgres 13, 14, 15, 16 and 17, and runs the Postgres tests on macOS and
+  Windows too.
+- The parser, checker, formatter and migrations are tested against a corpus of 68 real schemas.
 
 ## [0.1.1] - 2026-11-17
 

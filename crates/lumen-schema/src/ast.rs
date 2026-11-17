@@ -14,7 +14,7 @@ pub struct Ident {
 /// Comments written around an item, kept for the formatter and for `// lumen:` hints.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Comments {
-    /// `///` lines above the item: its documentation.
+    /// `///` lines above the item, then a `///` comment at the end of its line: its documentation.
     pub doc: Vec<String>,
     /// `//` lines above the item.
     pub leading: Vec<String>,

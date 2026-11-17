@@ -5,28 +5,28 @@
 
 use lumen_schema::ast::Arity;
 use lumen_schema::checked::{
-    DefaultValue, FieldKind, IndexKind, Literal, Model, ModelId, ModelKind, ReferentialAction,
-    RelationKind, Schema, SortOrder,
+    DefaultValue, Enum, FieldKind, IndexKind, Literal, Model, ModelId, ModelKind,
+    ReferentialAction, RelationKind, ScalarType, Schema, SortOrder,
 };
 
-use crate::postgres::types::{column_type, string_literal, type_name};
+use crate::postgres::types::{array_literal, column_type, string_literal, type_name};
 use crate::shape::{
     Action, Column, Default, EnumType, ForeignKey, Index, IndexColumn, PrimaryKey, Shape, Sort,
     Table,
 };
 
-/// Postgres cuts identifiers at 63 bytes; Prisma's names are cut the same way.
+/// Postgres cuts identifiers at 63 bytes.
 const MAX_IDENTIFIER: usize = 63;
 
-fn cut(name: String) -> String {
-    if name.len() <= MAX_IDENTIFIER {
-        return name;
-    }
-    let mut end = MAX_IDENTIFIER;
-    while !name.is_char_boundary(end) {
+/// `{body}_{suffix}`, with `body` shortened so the whole name fits in 63 bytes. Prisma keeps the
+/// suffix the same way, so `x_key` and `x_idx` on the same long column list stay two names.
+fn cut(body: &str, suffix: &str) -> String {
+    let room = MAX_IDENTIFIER - suffix.len() - 1;
+    let mut end = body.len().min(room);
+    while !body.is_char_boundary(end) {
         end -= 1;
     }
-    name[..end].to_owned()
+    format!("{}_{suffix}", &body[..end])
 }
 
 fn schema_of(model: &Model) -> String {
@@ -48,10 +48,34 @@ fn literal_sql(l: &Literal) -> String {
         Literal::String(s) | Literal::EnumValue(s) => string_literal(s),
         Literal::Number(n) => n.clone(),
         Literal::Boolean(b) => b.to_string(),
-        Literal::List(items) => {
-            let inner: Vec<String> = items.iter().map(literal_sql).collect();
-            format!("ARRAY[{}]", inner.join(", "))
-        }
+        Literal::List(items) => array_literal(&items.iter().map(element).collect::<Vec<_>>()),
+    }
+}
+
+/// One item of a list default, as it appears inside a Postgres array literal.
+fn element(l: &Literal) -> String {
+    match l {
+        Literal::String(s) | Literal::EnumValue(s) | Literal::Number(s) => s.clone(),
+        Literal::Boolean(b) => if *b { "t" } else { "f" }.to_owned(),
+        Literal::List(items) => format!(
+            "{{{}}}",
+            items.iter().map(element).collect::<Vec<_>>().join(",")
+        ),
+    }
+}
+
+/// An enum default with each value replaced by the name the database stores (`@map`).
+fn enum_values(e: &Enum, l: &Literal) -> Literal {
+    match l {
+        Literal::EnumValue(v) => Literal::EnumValue(
+            e.values
+                .iter()
+                .find(|x| x.name == *v)
+                .and_then(|x| x.mapped_name.clone())
+                .unwrap_or_else(|| v.clone()),
+        ),
+        Literal::List(items) => Literal::List(items.iter().map(|i| enum_values(e, i)).collect()),
+        other => other.clone(),
     }
 }
 
@@ -93,8 +117,25 @@ fn columns(schema: &Schema, model: &Model) -> Vec<Column> {
             Some(Column {
                 name: f.database_name().to_owned(),
                 ty,
-                nullable: f.arity == Arity::Optional,
-                default: f.default.as_ref().and_then(default_of),
+                // Prisma leaves list columns nullable even when the field is required
+                nullable: f.arity != Arity::Required,
+                default: f.default.as_ref().and_then(|d| match (&f.kind, d) {
+                    // the database holds the value's `@map` name
+                    (FieldKind::Enum(id), DefaultValue::Literal(l)) => Some(Default::Literal(
+                        literal_sql(&enum_values(&schema.enums[id.0], l)),
+                    )),
+                    // `@default("2.00")` on a number is the number, as Prisma writes it
+                    (
+                        FieldKind::Scalar(
+                            ScalarType::Int
+                            | ScalarType::BigInt
+                            | ScalarType::Float
+                            | ScalarType::Decimal,
+                        ),
+                        DefaultValue::Literal(Literal::String(n)),
+                    ) if n.parse::<f64>().is_ok() => Some(Default::Literal(n.clone())),
+                    _ => default_of(d),
+                }),
             })
         })
         .collect()
@@ -120,7 +161,7 @@ fn indexes(model: &Model, table: &str) -> (Option<PrimaryKey>, Vec<Index>) {
                     name: index
                         .mapped_name
                         .clone()
-                        .unwrap_or_else(|| cut(format!("{table}_pkey"))),
+                        .unwrap_or_else(|| cut(table, "pkey")),
                     columns: names,
                 });
             }
@@ -131,7 +172,7 @@ fn indexes(model: &Model, table: &str) -> (Option<PrimaryKey>, Vec<Index>) {
                     name: index
                         .mapped_name
                         .clone()
-                        .unwrap_or_else(|| cut(format!("{table}_{joined}_{suffix}"))),
+                        .unwrap_or_else(|| cut(&format!("{table}_{joined}"), suffix)),
                     columns: index
                         .fields
                         .iter()
@@ -178,7 +219,7 @@ fn join_table(schema: &Schema, name: &str, a: ModelId, b: ModelId) -> Option<Tab
     let ((a_col, a_ty), (b_col, b_ty)) = (single_id(ma)?, single_id(mb)?);
     let table = format!("_{name}");
     let fk = |column: &str, target: &Model, target_col: String| ForeignKey {
-        name: cut(format!("{table}_{column}_fkey")),
+        name: cut(&format!("{table}_{column}"), "fkey"),
         columns: vec![column.to_owned()],
         referenced_schema: schema_of(target),
         referenced_table: target.database_name().to_owned(),
@@ -204,11 +245,11 @@ fn join_table(schema: &Schema, name: &str, a: ModelId, b: ModelId) -> Option<Tab
             },
         ],
         primary_key: Some(PrimaryKey {
-            name: cut(format!("{table}_AB_pkey")),
+            name: cut(&format!("{table}_AB"), "pkey"),
             columns: vec!["A".into(), "B".into()],
         }),
         indexes: vec![Index {
-            name: cut(format!("{table}_B_index")),
+            name: cut(&format!("{table}_B"), "index"),
             columns: vec![IndexColumn {
                 name: "B".into(),
                 sort: Sort::Asc,
@@ -236,7 +277,8 @@ pub fn calculate(schema: &Schema) -> Shape {
         });
     }
     for model in &schema.models {
-        if model.kind == ModelKind::View || model.ignored {
+        // `@@ignore` hides a model from the client only; Prisma still creates its table
+        if model.kind == ModelKind::View {
             continue;
         }
         let table = model.database_name().to_owned();
@@ -260,7 +302,7 @@ pub fn calculate(schema: &Schema) -> Shape {
             continue;
         }
         let (ma, mb) = (&schema.models[a.0], &schema.models[b.0]);
-        if ma.kind == ModelKind::View || mb.kind == ModelKind::View || ma.ignored || mb.ignored {
+        if ma.kind == ModelKind::View || mb.kind == ModelKind::View {
             continue;
         }
         let cols = column_names(ma, &relation.fields);
@@ -269,10 +311,12 @@ pub fn calculate(schema: &Schema) -> Shape {
             .iter()
             .any(|&f| ma.fields[f].arity == Arity::Required);
         let foreign_key = ForeignKey {
-            name: relation
-                .mapped_name
-                .clone()
-                .unwrap_or_else(|| cut(format!("{}_{}_fkey", ma.database_name(), cols.join("_")))),
+            name: relation.mapped_name.clone().unwrap_or_else(|| {
+                cut(
+                    &format!("{}_{}", ma.database_name(), cols.join("_")),
+                    "fkey",
+                )
+            }),
             columns: cols,
             referenced_schema: schema_of(mb),
             referenced_table: mb.database_name().to_owned(),

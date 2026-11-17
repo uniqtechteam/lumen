@@ -82,14 +82,21 @@ fn index_fields(
     d: &mut Diagnostics,
 ) -> Option<Vec<IndexField>> {
     let label = format!("@@{}", attr.name.name);
-    let Some(Expr::Array(items, span)) = arg(attr, "fields", Some(0)) else {
-        d.push(Diagnostic::invalid_attribute_help(
-            attr.span,
-            &label,
-            "the fields are missing",
-            format!("list them, for example `{label}([email])`"),
-        ));
-        return None;
+    // a single field may be written without the brackets: `@@index(email)`
+    let (items, span) = match arg(attr, "fields", Some(0)) {
+        Some(Expr::Array(items, span)) => (items.as_slice(), span),
+        Some(one @ (Expr::Constant(_, span) | Expr::Function(_, _, span))) => {
+            (std::slice::from_ref(one), span)
+        }
+        _ => {
+            d.push(Diagnostic::invalid_attribute_help(
+                attr.span,
+                &label,
+                "the fields are missing",
+                format!("list them, for example `{label}([email])`"),
+            ));
+            return None;
+        }
     };
     if items.is_empty() {
         d.push(Diagnostic::invalid_attribute(

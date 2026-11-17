@@ -123,7 +123,7 @@ impl Formatter<'_> {
 
     fn split_trailing(&self, tokens: &[Token]) -> (Vec<Token>, Option<String>) {
         match tokens.last() {
-            Some(t) if matches!(t.kind, T::Comment(_)) => (
+            Some(t) if matches!(t.kind, T::Comment(_) | T::DocComment(_)) => (
                 tokens[..tokens.len() - 1].to_vec(),
                 Some(self.raw(t).to_owned()),
             ),
@@ -336,11 +336,8 @@ fn render_body(body: &[Line], out: &mut String) {
                         text.push_str(ty);
                     }
                     if !attrs.is_empty() {
-                        let pad = if ty.is_empty() {
-                            name_w.saturating_sub(width(name))
-                        } else {
-                            type_w - width(ty)
-                        };
+                        // an enum value has no type; its name is already padded above
+                        let pad = if ty.is_empty() { 0 } else { type_w - width(ty) };
                         text.push_str(&" ".repeat(pad));
                         text.push(' ');
                         text.push_str(&attrs.join(" "));
