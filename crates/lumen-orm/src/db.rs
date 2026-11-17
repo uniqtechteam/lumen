@@ -263,8 +263,19 @@ impl Db {
     /// Connect to `url`.
     ///
     /// # Errors
-    /// P1001 when the database cannot be reached.
+    /// P1013 when `url` is not a `postgresql://` or `postgres://` URL, P1001 when the database
+    /// cannot be reached.
     pub async fn connect(url: &str) -> Result<Self> {
+        let scheme = url.split_once("://").map_or("", |(s, _)| s);
+        if scheme != "postgresql" && scheme != "postgres" {
+            let shown = url.split_once(':').map_or(url, |(s, _)| s);
+            return Err(Error::new(
+                "P1013",
+                format!(
+                    "the database URL must start with postgresql://, but it starts with `{shown}:`"
+                ),
+            ));
+        }
         let pool = PgPool::connect(url)
             .await
             .map_err(|e| Error::from_sqlx(e, &HashMap::new()))?;

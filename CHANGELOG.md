@@ -140,3 +140,6 @@ still `lumen`.
 - Paging a to-one include, or a negative `skip` or `take`, is now a P2009 error. Before, the value
   was ignored without a word.
 - `lumen generate` prints the client's path as `src/db.rs` rather than `prisma/../src/db.rs`.
+- `Db::connect` (and so the generated `Client::connect`) refuses a URL that is not
+  `postgresql://` at once with P1013. Before, a `file:` URL left over from another tool waited
+  30 seconds for the pool and then said the database could not be reached.
