@@ -78,5 +78,6 @@ keys with `$in`. Many-to-many relation filters are not available on MongoDB yet.
 ## Errors
 
 Every error has Prisma's `code` (`P2002`, `P2003`, `P2025`, ...) and a plain `message`. A unique
-violation also lists the fields behind the constraint in `err.fields`. `err.http_status()` turns
+violation on Postgres also lists the fields behind the constraint in `err.fields` (on MongoDB it
+is empty in 0.1, and the message names the index). `err.http_status()` turns
 the code into the status a web API should answer with.
