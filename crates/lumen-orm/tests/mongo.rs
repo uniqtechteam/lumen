@@ -339,3 +339,93 @@ async fn many_to_many_filters_skip_dangling_ids_and_run_in_transactions() {
     assert_eq!(ids(&db, col("note").equals("lit")).await, [1, 2]);
     db.database().drop().await.unwrap();
 }
+
+#[tokio::test]
+async fn a_duplicate_names_the_fields_of_the_unique_index() {
+    let Some(db) = setup().await else { return };
+    let items = db.database().collection::<mongodb::bson::Document>("Item");
+    items
+        .create_index(
+            mongodb::IndexModel::builder()
+                .keys(doc! { "role": 1, "price": -1 })
+                .options(
+                    mongodb::options::IndexOptions::builder()
+                        .unique(true)
+                        .name("Item_role_price_key".to_owned())
+                        .build(),
+                )
+                .build(),
+        )
+        .await
+        .unwrap();
+    let db = db.with_constraints(std::collections::HashMap::from([
+        ("Item.name_1".to_owned(), vec!["name".to_owned()]),
+        (
+            "Item.Item_role_price_key".to_owned(),
+            vec!["role".to_owned(), "price".to_owned()],
+        ),
+    ]));
+    let item = |id: i32, name: &str, role: &str| Item {
+        id,
+        name: name.into(),
+        note: None,
+        price: "12.50".parse().unwrap(),
+        role: role.into(),
+        tags: vec![],
+    };
+
+    let e = db
+        .insert_many("Item", &[item(9, "Lamp", "ADMIN")])
+        .await
+        .unwrap_err();
+    assert_eq!(e.code, "P2002");
+    assert_eq!(e.fields, ["name"]);
+    assert_eq!(e.constraint.as_deref(), Some("name_1"));
+    assert_eq!(
+        e.to_string(),
+        "P2002: a record with the same name already exists"
+    );
+
+    let e = db
+        .insert_many("Item", &[item(9, "Torch", "READER")])
+        .await
+        .unwrap_err();
+    assert_eq!(e.fields, ["role", "price"], "a compound unique index");
+
+    let e = db
+        .update_many(
+            "Item",
+            Some(&col("id").equals(2)),
+            vec![("name".into(), "Desk".into())],
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(
+        (e.code, e.fields.clone()),
+        ("P2002", vec!["name".to_owned()])
+    );
+
+    let first: mongodb::bson::Document = items.find_one(doc! {}).await.unwrap().unwrap();
+    let again = doc! { "_id": first.get("_id").unwrap().clone(), "id": 10, "name": "Again" };
+    let e = db
+        .transaction(async |tx| lumen_orm::mongo::MongoRun::insert_many(tx, "Item", &[again]).await)
+        .await
+        .unwrap_err();
+    assert_eq!(
+        e.fields,
+        ["_id"],
+        "the built-in _id index, in a transaction"
+    );
+
+    let unknown = MongoDb::new(db.database().clone());
+    let e = unknown
+        .insert_many("Item", &[item(9, "Lamp", "ADMIN")])
+        .await
+        .unwrap_err();
+    assert!(e.fields.is_empty(), "an index the schema did not name");
+    assert_eq!(
+        e.to_string(),
+        "P2002: a record with the same unique value (index name_1) already exists"
+    );
+    db.database().drop().await.unwrap();
+}

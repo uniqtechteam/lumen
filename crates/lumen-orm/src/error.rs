@@ -54,6 +54,22 @@ impl Error {
         Self::build(code, message.into(), None, Vec::new(), None)
     }
 
+    /// P2002: a duplicate on the unique constraint (or index) `constraint`, made of `fields`.
+    #[must_use]
+    #[cfg(feature = "mongodb")]
+    pub(crate) fn duplicate(constraint: Option<String>, fields: Vec<String>) -> Self {
+        let named = if fields.is_empty() {
+            constraint.as_deref().map_or_else(
+                || "unique value".to_owned(),
+                |c| format!("unique value (index {c})"),
+            )
+        } else {
+            fields.join(", ")
+        };
+        let message = format!("a record with the same {named} already exists");
+        Self::build("P2002", message, constraint, fields, None)
+    }
+
     /// P2025: the record an operation needed does not exist.
     #[must_use]
     pub fn not_found(what: &str) -> Self {
