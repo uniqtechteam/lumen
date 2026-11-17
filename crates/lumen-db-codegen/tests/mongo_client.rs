@@ -1,7 +1,7 @@
 //! SPEC-GEN-001 on MongoDB and SPEC-MONGO-001 AC-002: the client generated for
 //! `tests/mongo.prisma` is current, compiles, and works against a real MongoDB (when
-//! `LUMEN_TEST_MONGO_URL` is set): ObjectIds, composite types, client-side defaults, includes and
-//! transactions.
+//! `LUMEN_TEST_MONGO_URL` is set): ObjectIds, composite types, client-side defaults, includes,
+//! transactions, many-to-many relation filters and duplicate errors that name schema fields.
 
 #![allow(
     clippy::unwrap_used,
@@ -14,7 +14,7 @@
 #[path = "generated/mongo.rs"]
 mod db;
 
-use db::{Address, Client, Phone, account, session};
+use db::{Address, Client, Phone, account, label, post, session};
 use lumen_orm::Set;
 
 #[test]
@@ -325,6 +325,153 @@ async fn ac_fr_002_relation_filters_on_mongo() {
             .await
             .unwrap(),
         1
+    );
+    client.db().database().drop().await.unwrap();
+}
+
+fn new_post(
+    slug: &str,
+    lang: &str,
+    title: &str,
+    labels: Vec<lumen_orm::mongo::ObjectId>,
+) -> post::Create {
+    post::Create {
+        id: None,
+        slug: slug.into(),
+        lang: lang.into(),
+        title: title.into(),
+        label_ids: Some(labels),
+    }
+}
+
+/// SPEC-QUERY-001 FR-002 and SPEC-MONGO-001: many-to-many filters through the id lists on both
+/// sides, and duplicates that name the schema's fields (`@map`'d ones too).
+#[tokio::test]
+async fn many_to_many_filters_and_duplicate_fields_on_mongo() {
+    let Some(client) = client().await else { return };
+    let mut labels = Vec::new();
+    for name in ["rust", "db", "misc"] {
+        let l = label::Create {
+            id: None,
+            name: name.into(),
+            post_ids: None,
+        };
+        labels.push(client.label().create(l).await.unwrap().id);
+    }
+    let (rust, data) = (labels[0], labels[1]);
+    let p1 = client
+        .post()
+        .create(new_post("rust-1", "en", "Hello", vec![rust, data]))
+        .await
+        .unwrap();
+    let p2 = client
+        .post()
+        .create(new_post("rust-2", "en", "Again", vec![rust]))
+        .await
+        .unwrap();
+    client
+        .post()
+        .create(new_post("notes", "vi", "Ghi chu", vec![]))
+        .await
+        .unwrap();
+    for (l, posts) in [(rust, vec![p1.id, p2.id]), (data, vec![p1.id])] {
+        let set = label::Update {
+            post_ids: Set::To(posts),
+            ..Default::default()
+        };
+        client
+            .label()
+            .update(label::UniqueWhere::Id(l), set)
+            .await
+            .unwrap();
+    }
+
+    let slugs = async |f: lumen_orm::Filter| {
+        let found = client
+            .post()
+            .find_many()
+            .filter(f)
+            .order_by(post::slug::asc());
+        let found = found.exec().await.unwrap();
+        found.into_iter().map(|p| p.slug).collect::<Vec<_>>()
+    };
+    let any = || lumen_orm::Filter::And(vec![]);
+    assert_eq!(
+        slugs(post::labels::some(label::name::equals("db"))).await,
+        ["rust-1"]
+    );
+    assert_eq!(
+        slugs(post::labels::every(label::name::equals("rust"))).await,
+        ["notes", "rust-2"],
+        "every is true for a post without labels"
+    );
+    assert_eq!(slugs(post::labels::none(any())).await, ["notes"]);
+    let names = async |f: lumen_orm::Filter| {
+        let found = client
+            .label()
+            .find_many()
+            .filter(f)
+            .order_by(label::name::asc());
+        let found = found.exec().await.unwrap();
+        found.into_iter().map(|l| l.name).collect::<Vec<_>>()
+    };
+    assert_eq!(
+        names(label::posts::some(post::labels::some(label::name::equals(
+            "db"
+        ))))
+        .await,
+        ["db", "rust"],
+        "nested, from the other side: labels that share a post with db"
+    );
+    assert_eq!(names(label::posts::none(any())).await, ["misc"]);
+    assert_eq!(
+        client
+            .post()
+            .count(Some(post::labels::some(label::name::equals("rust"))))
+            .await
+            .unwrap(),
+        2
+    );
+
+    let dup = client
+        .post()
+        .create(new_post("rust-1", "de", "Hallo", vec![]))
+        .await
+        .unwrap_err();
+    assert_eq!(dup.code, "P2002");
+    assert_eq!(dup.fields, ["slug"], "the schema name of url_slug");
+    assert_eq!(dup.constraint.as_deref(), Some("Post_url_slug_key"));
+    assert_eq!(
+        dup.to_string(),
+        "P2002: a record with the same slug already exists"
+    );
+    let dup = client
+        .post()
+        .create(new_post("hello-again", "en", "Hello", vec![]))
+        .await
+        .unwrap_err();
+    assert_eq!(
+        dup.fields,
+        ["lang", "title"],
+        "a compound unique with a mapped field"
+    );
+    let mut again = new_post("copy", "fr", "Copie", vec![]);
+    again.id = Some(p1.id);
+    let dup = client.post().create(again).await.unwrap_err();
+    assert_eq!(dup.fields, ["id"], "the _id index names the id field");
+    let rename = label::Update {
+        name: Set::To("rust".into()),
+        ..Default::default()
+    };
+    let dup = client
+        .label()
+        .update(label::UniqueWhere::Id(data), rename)
+        .await
+        .unwrap_err();
+    assert_eq!(
+        (dup.code, dup.fields.clone()),
+        ("P2002", vec!["name".to_owned()]),
+        "an update"
     );
     client.db().database().drop().await.unwrap();
 }

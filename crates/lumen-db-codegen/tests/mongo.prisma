@@ -30,6 +30,27 @@ model Settings {
   theme     String  @default("light")
 }
 
+/// Many-to-many with `Label`: each side keeps a list of the other's ids. Field names that differ
+/// in the database (`@map`) show how filters and duplicate errors use schema names.
+model Post {
+  id       String   @id @default(auto()) @map("_id") @db.ObjectId
+  slug     String   @unique @map("url_slug")
+  lang     String
+  title    String   @map("heading")
+  labelIds String[] @map("label_ids") @db.ObjectId
+  labels   Label[]  @relation(fields: [labelIds], references: [id])
+
+  @@unique([lang, title])
+  @@index([labelIds])
+}
+
+model Label {
+  id      String   @id @default(auto()) @map("_id") @db.ObjectId
+  name    String   @unique
+  postIds String[] @db.ObjectId
+  posts   Post[]   @relation(fields: [postIds], references: [id])
+}
+
 /// Embedded in an account document.
 type Address {
   street String

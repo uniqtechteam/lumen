@@ -22,6 +22,8 @@ enum Link {
         this: (String, String),
         related: (String, String),
     },
+    /// Through id lists (MongoDB): this record's list field and the related field it holds.
+    IdList { list: String, key: String },
 }
 
 /// The single-column id of a model, as a column name.
@@ -39,7 +41,22 @@ fn link(schema: &Schema, model_id: ModelId, field: usize, mongo: bool) -> Option
     let on_a = r.a.model == model_id && r.a.field == field;
     if r.kind == RelationKind::ManyToMany {
         if mongo {
-            return None;
+            // each side names its own id list and the field on the other model it holds
+            let (list, key) = if on_a {
+                (
+                    &a.fields[*r.fields.first()?],
+                    &b.fields[*r.references.first()?],
+                )
+            } else {
+                (
+                    &b.fields[*r.b_fields.first()?],
+                    &a.fields[*r.b_references.first()?],
+                )
+            };
+            return Some(Link::IdList {
+                list: list.database_name().to_owned(),
+                key: key.database_name().to_owned(),
+            });
         }
         let (ida, idb) = (single_id(a)?, single_id(b)?);
         let (this, related) = if on_a {
@@ -92,6 +109,9 @@ fn related_expr(schema: &Schema, target: ModelId, link: &Link, mongo: bool) -> T
             let pairs = pairs.iter().map(|(r, t)| quote!((#r, #t)));
             quote!(::lumen_orm::Related::new(#table, &[#(#pairs),*]))
         }
+        Link::IdList { list, key } => {
+            quote!(::lumen_orm::Related::id_list(#table, #list, #key))
+        }
         Link::Through {
             schema: join_schema,
             table: join,
@@ -111,7 +131,8 @@ fn related_expr(schema: &Schema, target: ModelId, link: &Link, mongo: bool) -> T
     }
 }
 
-/// One module per relation field of `model_id` (`mongo`: collection names, no many-to-many).
+/// One module per relation field of `model_id` (`mongo`: collection names, id lists for
+/// many-to-many).
 pub(crate) fn modules(schema: &Schema, model_id: ModelId, mongo: bool) -> Vec<TokenStream> {
     let model = &schema.models[model_id.0];
     let mut out = Vec::new();

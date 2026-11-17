@@ -2324,6 +2324,1246 @@ pub mod settings {
         }
     }
 }
+/// The `Post` model (collection `Post`).
+pub mod post {
+    /// The collection.
+    pub const COLLECTION: &str = "Post";
+    /// A find over this model's documents, for dynamic queries.
+    pub fn find() -> ::lumen_orm::mongo::Find {
+        ::lumen_orm::mongo::Find {
+            collection: COLLECTION.to_owned(),
+            ..::lumen_orm::mongo::Find::default()
+        }
+    }
+    /// Many-to-many with `Label`: each side keeps a list of the other's ids. Field names that differ
+    /// in the database (`@map`) show how filters and duplicate errors use schema names.
+    #[derive(
+        Debug,
+        Clone,
+        PartialEq,
+        ::lumen_orm::serde::Serialize,
+        ::lumen_orm::serde::Deserialize
+    )]
+    #[serde(crate = "::lumen_orm::serde")]
+    pub struct Post {
+        #[serde(rename = "_id")]
+        pub id: ::lumen_orm::mongo::ObjectId,
+        #[serde(rename = "url_slug")]
+        pub slug: String,
+        #[serde(rename = "lang")]
+        pub lang: String,
+        #[serde(rename = "heading")]
+        pub title: String,
+        #[serde(rename = "label_ids")]
+        #[serde(default)]
+        pub label_ids: Vec<::lumen_orm::mongo::ObjectId>,
+    }
+    /// Conditions and ordering on `id`.
+    pub mod id {
+        /// The column.
+        pub const COLUMN: &str = "_id";
+        /// Equal to `v`.
+        pub fn equals(v: ::lumen_orm::mongo::ObjectId) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).equals(::lumen_orm::Value::from(v))
+        }
+        /// Not equal to `v` (rows where it is NULL match too).
+        pub fn not(v: ::lumen_orm::mongo::ObjectId) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).not_equals(::lumen_orm::Value::from(v))
+        }
+        /// One of `values`.
+        pub fn is_in(
+            values: impl IntoIterator<Item = ::lumen_orm::mongo::ObjectId>,
+        ) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN)
+                .is_in(values.into_iter().map(::lumen_orm::Value::from))
+        }
+        /// None of `values`.
+        pub fn not_in(
+            values: impl IntoIterator<Item = ::lumen_orm::mongo::ObjectId>,
+        ) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN)
+                .not_in(values.into_iter().map(::lumen_orm::Value::from))
+        }
+        /// Less than `v`.
+        pub fn lt(v: ::lumen_orm::mongo::ObjectId) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).lt(::lumen_orm::Value::from(v))
+        }
+        /// At most `v`.
+        pub fn lte(v: ::lumen_orm::mongo::ObjectId) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).lte(::lumen_orm::Value::from(v))
+        }
+        /// More than `v`.
+        pub fn gt(v: ::lumen_orm::mongo::ObjectId) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).gt(::lumen_orm::Value::from(v))
+        }
+        /// At least `v`.
+        pub fn gte(v: ::lumen_orm::mongo::ObjectId) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).gte(::lumen_orm::Value::from(v))
+        }
+        /// Smallest first.
+        pub fn asc() -> (String, ::lumen_orm::Order) {
+            (COLUMN.to_owned(), ::lumen_orm::Order::Asc)
+        }
+        /// Largest first.
+        pub fn desc() -> (String, ::lumen_orm::Order) {
+            (COLUMN.to_owned(), ::lumen_orm::Order::Desc)
+        }
+    }
+    /// Conditions and ordering on `slug`.
+    pub mod slug {
+        /// The column.
+        pub const COLUMN: &str = "url_slug";
+        /// Equal to `v`.
+        pub fn equals(v: impl Into<String>) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).equals(::lumen_orm::Value::from(v.into()))
+        }
+        /// Not equal to `v` (rows where it is NULL match too).
+        pub fn not(v: impl Into<String>) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).not_equals(::lumen_orm::Value::from(v.into()))
+        }
+        /// One of `values`.
+        pub fn is_in(values: impl IntoIterator<Item = String>) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN)
+                .is_in(values.into_iter().map(::lumen_orm::Value::from))
+        }
+        /// None of `values`.
+        pub fn not_in(values: impl IntoIterator<Item = String>) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN)
+                .not_in(values.into_iter().map(::lumen_orm::Value::from))
+        }
+        /// Less than `v`.
+        pub fn lt(v: impl Into<String>) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).lt(::lumen_orm::Value::from(v.into()))
+        }
+        /// At most `v`.
+        pub fn lte(v: impl Into<String>) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).lte(::lumen_orm::Value::from(v.into()))
+        }
+        /// More than `v`.
+        pub fn gt(v: impl Into<String>) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).gt(::lumen_orm::Value::from(v.into()))
+        }
+        /// At least `v`.
+        pub fn gte(v: impl Into<String>) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).gte(::lumen_orm::Value::from(v.into()))
+        }
+        /// Contains the text.
+        pub fn contains(v: impl Into<String>) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).contains(v)
+        }
+        /// Contains the text, ignoring case.
+        pub fn contains_insensitive(v: impl Into<String>) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).contains_insensitive(v)
+        }
+        /// Starts with the text.
+        pub fn starts_with(v: impl Into<String>) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).starts_with(v)
+        }
+        /// Ends with the text.
+        pub fn ends_with(v: impl Into<String>) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).ends_with(v)
+        }
+        /// Starts with the text, ignoring case.
+        pub fn starts_with_insensitive(v: impl Into<String>) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).starts_with_insensitive(v)
+        }
+        /// Ends with the text, ignoring case.
+        pub fn ends_with_insensitive(v: impl Into<String>) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).ends_with_insensitive(v)
+        }
+        /// Equal, ignoring case.
+        pub fn equals_insensitive(v: impl Into<String>) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).equals_insensitive(v)
+        }
+        /// Smallest first.
+        pub fn asc() -> (String, ::lumen_orm::Order) {
+            (COLUMN.to_owned(), ::lumen_orm::Order::Asc)
+        }
+        /// Largest first.
+        pub fn desc() -> (String, ::lumen_orm::Order) {
+            (COLUMN.to_owned(), ::lumen_orm::Order::Desc)
+        }
+    }
+    /// Conditions and ordering on `lang`.
+    pub mod lang {
+        /// The column.
+        pub const COLUMN: &str = "lang";
+        /// Equal to `v`.
+        pub fn equals(v: impl Into<String>) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).equals(::lumen_orm::Value::from(v.into()))
+        }
+        /// Not equal to `v` (rows where it is NULL match too).
+        pub fn not(v: impl Into<String>) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).not_equals(::lumen_orm::Value::from(v.into()))
+        }
+        /// One of `values`.
+        pub fn is_in(values: impl IntoIterator<Item = String>) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN)
+                .is_in(values.into_iter().map(::lumen_orm::Value::from))
+        }
+        /// None of `values`.
+        pub fn not_in(values: impl IntoIterator<Item = String>) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN)
+                .not_in(values.into_iter().map(::lumen_orm::Value::from))
+        }
+        /// Less than `v`.
+        pub fn lt(v: impl Into<String>) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).lt(::lumen_orm::Value::from(v.into()))
+        }
+        /// At most `v`.
+        pub fn lte(v: impl Into<String>) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).lte(::lumen_orm::Value::from(v.into()))
+        }
+        /// More than `v`.
+        pub fn gt(v: impl Into<String>) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).gt(::lumen_orm::Value::from(v.into()))
+        }
+        /// At least `v`.
+        pub fn gte(v: impl Into<String>) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).gte(::lumen_orm::Value::from(v.into()))
+        }
+        /// Contains the text.
+        pub fn contains(v: impl Into<String>) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).contains(v)
+        }
+        /// Contains the text, ignoring case.
+        pub fn contains_insensitive(v: impl Into<String>) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).contains_insensitive(v)
+        }
+        /// Starts with the text.
+        pub fn starts_with(v: impl Into<String>) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).starts_with(v)
+        }
+        /// Ends with the text.
+        pub fn ends_with(v: impl Into<String>) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).ends_with(v)
+        }
+        /// Starts with the text, ignoring case.
+        pub fn starts_with_insensitive(v: impl Into<String>) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).starts_with_insensitive(v)
+        }
+        /// Ends with the text, ignoring case.
+        pub fn ends_with_insensitive(v: impl Into<String>) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).ends_with_insensitive(v)
+        }
+        /// Equal, ignoring case.
+        pub fn equals_insensitive(v: impl Into<String>) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).equals_insensitive(v)
+        }
+        /// Smallest first.
+        pub fn asc() -> (String, ::lumen_orm::Order) {
+            (COLUMN.to_owned(), ::lumen_orm::Order::Asc)
+        }
+        /// Largest first.
+        pub fn desc() -> (String, ::lumen_orm::Order) {
+            (COLUMN.to_owned(), ::lumen_orm::Order::Desc)
+        }
+    }
+    /// Conditions and ordering on `title`.
+    pub mod title {
+        /// The column.
+        pub const COLUMN: &str = "heading";
+        /// Equal to `v`.
+        pub fn equals(v: impl Into<String>) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).equals(::lumen_orm::Value::from(v.into()))
+        }
+        /// Not equal to `v` (rows where it is NULL match too).
+        pub fn not(v: impl Into<String>) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).not_equals(::lumen_orm::Value::from(v.into()))
+        }
+        /// One of `values`.
+        pub fn is_in(values: impl IntoIterator<Item = String>) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN)
+                .is_in(values.into_iter().map(::lumen_orm::Value::from))
+        }
+        /// None of `values`.
+        pub fn not_in(values: impl IntoIterator<Item = String>) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN)
+                .not_in(values.into_iter().map(::lumen_orm::Value::from))
+        }
+        /// Less than `v`.
+        pub fn lt(v: impl Into<String>) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).lt(::lumen_orm::Value::from(v.into()))
+        }
+        /// At most `v`.
+        pub fn lte(v: impl Into<String>) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).lte(::lumen_orm::Value::from(v.into()))
+        }
+        /// More than `v`.
+        pub fn gt(v: impl Into<String>) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).gt(::lumen_orm::Value::from(v.into()))
+        }
+        /// At least `v`.
+        pub fn gte(v: impl Into<String>) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).gte(::lumen_orm::Value::from(v.into()))
+        }
+        /// Contains the text.
+        pub fn contains(v: impl Into<String>) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).contains(v)
+        }
+        /// Contains the text, ignoring case.
+        pub fn contains_insensitive(v: impl Into<String>) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).contains_insensitive(v)
+        }
+        /// Starts with the text.
+        pub fn starts_with(v: impl Into<String>) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).starts_with(v)
+        }
+        /// Ends with the text.
+        pub fn ends_with(v: impl Into<String>) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).ends_with(v)
+        }
+        /// Starts with the text, ignoring case.
+        pub fn starts_with_insensitive(v: impl Into<String>) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).starts_with_insensitive(v)
+        }
+        /// Ends with the text, ignoring case.
+        pub fn ends_with_insensitive(v: impl Into<String>) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).ends_with_insensitive(v)
+        }
+        /// Equal, ignoring case.
+        pub fn equals_insensitive(v: impl Into<String>) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).equals_insensitive(v)
+        }
+        /// Smallest first.
+        pub fn asc() -> (String, ::lumen_orm::Order) {
+            (COLUMN.to_owned(), ::lumen_orm::Order::Asc)
+        }
+        /// Largest first.
+        pub fn desc() -> (String, ::lumen_orm::Order) {
+            (COLUMN.to_owned(), ::lumen_orm::Order::Desc)
+        }
+    }
+    /// Conditions and ordering on `labelIds`.
+    pub mod label_ids {
+        /// The column.
+        pub const COLUMN: &str = "label_ids";
+        /// Smallest first.
+        pub fn asc() -> (String, ::lumen_orm::Order) {
+            (COLUMN.to_owned(), ::lumen_orm::Order::Asc)
+        }
+        /// Largest first.
+        pub fn desc() -> (String, ::lumen_orm::Order) {
+            (COLUMN.to_owned(), ::lumen_orm::Order::Desc)
+        }
+    }
+    /// Conditions on the related `Label` records of `labels`, built with `label::..` filters.
+    pub mod labels {
+        fn related() -> ::lumen_orm::Related {
+            ::lumen_orm::Related::id_list(
+                ::lumen_orm::Table::new("Label"),
+                "label_ids",
+                "_id",
+            )
+        }
+        /// At least one related record matches `f`.
+        pub fn some(f: ::lumen_orm::Filter) -> ::lumen_orm::Filter {
+            related().some(f)
+        }
+        /// Every related record matches `f` (true when there are none).
+        pub fn every(f: ::lumen_orm::Filter) -> ::lumen_orm::Filter {
+            related().every(f)
+        }
+        /// No related record matches `f`.
+        pub fn none(f: ::lumen_orm::Filter) -> ::lumen_orm::Filter {
+            related().none(f)
+        }
+    }
+    /// The data for a new document. The id (`auto()`) and fields with defaults are `Option`;
+    /// the client fills the defaults, since MongoDB has none.
+    #[derive(Debug, Clone, PartialEq)]
+    pub struct Create {
+        pub id: Option<::lumen_orm::mongo::ObjectId>,
+        pub slug: String,
+        pub lang: String,
+        pub title: String,
+        pub label_ids: Option<Vec<::lumen_orm::mongo::ObjectId>>,
+    }
+    #[derive(::lumen_orm::serde::Serialize)]
+    #[serde(crate = "::lumen_orm::serde")]
+    struct NewDocument {
+        #[serde(rename = "_id", skip_serializing_if = "Option::is_none")]
+        id: Option<::lumen_orm::mongo::ObjectId>,
+        #[serde(rename = "url_slug")]
+        slug: String,
+        #[serde(rename = "lang")]
+        lang: String,
+        #[serde(rename = "heading")]
+        title: String,
+        #[serde(rename = "label_ids", skip_serializing_if = "Option::is_none")]
+        label_ids: Option<Vec<::lumen_orm::mongo::ObjectId>>,
+    }
+    impl Create {
+        fn into_document(self) -> NewDocument {
+            NewDocument {
+                id: self.id,
+                slug: self.slug,
+                lang: self.lang,
+                title: self.title,
+                label_ids: self.label_ids,
+            }
+        }
+    }
+    /// The fields to change; `Set::NotSet` (the default) leaves a field as it is.
+    #[derive(Debug, Clone, Default, PartialEq)]
+    pub struct Update {
+        pub id: ::lumen_orm::Set<::lumen_orm::mongo::ObjectId>,
+        pub slug: ::lumen_orm::Set<String>,
+        pub lang: ::lumen_orm::Set<String>,
+        pub title: ::lumen_orm::Set<String>,
+        pub label_ids: ::lumen_orm::Set<Vec<::lumen_orm::mongo::ObjectId>>,
+    }
+    impl Update {
+        fn set(self) -> Vec<(String, ::lumen_orm::Value)> {
+            let mut set = Vec::new();
+            if let ::lumen_orm::Set::To(v) = self.id {
+                set.push(("_id".to_owned(), ::lumen_orm::Value::from(v)));
+            }
+            if let ::lumen_orm::Set::To(v) = self.slug {
+                set.push(("url_slug".to_owned(), ::lumen_orm::Value::from(v)));
+            }
+            if let ::lumen_orm::Set::To(v) = self.lang {
+                set.push(("lang".to_owned(), ::lumen_orm::Value::from(v)));
+            }
+            if let ::lumen_orm::Set::To(v) = self.title {
+                set.push(("heading".to_owned(), ::lumen_orm::Value::from(v)));
+            }
+            if let ::lumen_orm::Set::To(v) = self.label_ids {
+                set.push(("label_ids".to_owned(), ::lumen_orm::Value::from(v)));
+            }
+            set
+        }
+    }
+    /// One record, by its id or a unique key.
+    #[derive(Debug, Clone, PartialEq)]
+    pub enum UniqueWhere {
+        Id(::lumen_orm::mongo::ObjectId),
+        Slug(String),
+        LangTitle { lang: String, title: String },
+    }
+    impl UniqueWhere {
+        fn columns(&self) -> Vec<String> {
+            match self {
+                Self::Id(_) => vec!["_id".to_owned()],
+                Self::Slug(_) => vec!["url_slug".to_owned()],
+                Self::LangTitle { .. } => vec!["lang".to_owned(), "heading".to_owned()],
+            }
+        }
+    }
+    impl From<UniqueWhere> for ::lumen_orm::Filter {
+        fn from(w: UniqueWhere) -> Self {
+            match w {
+                UniqueWhere::Id(v) => {
+                    ::lumen_orm::col("_id").equals(::lumen_orm::Value::from(v))
+                }
+                UniqueWhere::Slug(v) => {
+                    ::lumen_orm::col("url_slug").equals(::lumen_orm::Value::from(v))
+                }
+                UniqueWhere::LangTitle { lang, title } => {
+                    ::lumen_orm::Filter::And(
+                        vec![
+                            ::lumen_orm::col("lang")
+                            .equals(::lumen_orm::Value::from(lang)),
+                            ::lumen_orm::col("heading")
+                            .equals(::lumen_orm::Value::from(title))
+                        ],
+                    )
+                }
+            }
+        }
+    }
+    fn by_id(r: &Post) -> ::lumen_orm::Filter {
+        ::lumen_orm::col("_id").equals(::lumen_orm::Value::from(r.id.clone()))
+    }
+    /// The operations on this model, on the database or in a transaction.
+    pub struct Actions<R> {
+        run: R,
+    }
+    /// The operations, on any [`::lumen_orm::mongo::MongoRun`] (for example `&mut tx`).
+    pub fn on<R: ::lumen_orm::mongo::MongoRun>(run: R) -> Actions<R> {
+        Actions { run }
+    }
+    impl<R: ::lumen_orm::mongo::MongoRun> Actions<R> {
+        /// Documents matching the filters you add.
+        #[must_use]
+        pub fn find_many(self) -> FindMany<R> {
+            FindMany {
+                run: self.run,
+                find: find(),
+            }
+        }
+        /// The document with this id or unique key.
+        ///
+        /// # Errors
+        /// A coded error from the database.
+        pub async fn find_unique(
+            mut self,
+            w: UniqueWhere,
+        ) -> ::lumen_orm::Result<Option<Post>> {
+            let mut f = find();
+            f.filter = Some(w.into());
+            f.limit = Some(1);
+            Ok(
+                ::lumen_orm::mongo::MongoRun::find(&mut self.run, &f)
+                    .await?
+                    .into_iter()
+                    .next(),
+            )
+        }
+        /// The first document matching `filter`.
+        ///
+        /// # Errors
+        /// A coded error from the database.
+        pub async fn find_first(
+            self,
+            filter: ::lumen_orm::Filter,
+        ) -> ::lumen_orm::Result<Option<Post>> {
+            Ok(self.find_many().filter(filter).take(1).exec().await?.into_iter().next())
+        }
+        /// Store a new document and return it.
+        ///
+        /// # Errors
+        /// P2002 when a unique index is hit; a coded error otherwise.
+        pub async fn create(mut self, data: Create) -> ::lumen_orm::Result<Post> {
+            let ids = ::lumen_orm::mongo::MongoRun::insert_many(
+                    &mut self.run,
+                    "Post",
+                    &[data.into_document()],
+                )
+                .await?;
+            let id = ids
+                .first()
+                .map(::lumen_orm::mongo::value_of_bson)
+                .unwrap_or(::lumen_orm::Value::Null);
+            let mut f = find();
+            f.filter = Some(::lumen_orm::col("_id").equals(id));
+            ::lumen_orm::mongo::MongoRun::find(&mut self.run, &f)
+                .await?
+                .into_iter()
+                .next()
+                .ok_or_else(|| ::lumen_orm::Error::not_found("Post record"))
+        }
+        /// Store many documents; the number stored.
+        ///
+        /// # Errors
+        /// A coded error from the database.
+        pub async fn create_many(
+            mut self,
+            data: Vec<Create>,
+        ) -> ::lumen_orm::Result<u64> {
+            let docs: Vec<NewDocument> = data
+                .into_iter()
+                .map(Create::into_document)
+                .collect();
+            let ids = ::lumen_orm::mongo::MongoRun::insert_many(
+                    &mut self.run,
+                    "Post",
+                    &docs,
+                )
+                .await?;
+            Ok(ids.len() as u64)
+        }
+        /// Change one document and return it (found first, so a changed unique key is fine).
+        ///
+        /// # Errors
+        /// P2025 when there is no such document; a coded error otherwise.
+        pub async fn update(
+            mut self,
+            w: UniqueWhere,
+            data: Update,
+        ) -> ::lumen_orm::Result<Post> {
+            let mut f = find();
+            f.filter = Some(w.into());
+            f.limit = Some(1);
+            let Some(current) = ::lumen_orm::mongo::MongoRun::find::<
+                Post,
+            >(&mut self.run, &f)
+                .await?
+                .into_iter()
+                .next() else {
+                return Err(::lumen_orm::Error::not_found("Post record"));
+            };
+            let set = data.set();
+            if !set.is_empty() {
+                ::lumen_orm::mongo::MongoRun::update_many(
+                        &mut self.run,
+                        "Post",
+                        Some(&by_id(&current)),
+                        set,
+                    )
+                    .await?;
+            }
+            let mut again = find();
+            again.filter = Some(by_id(&current));
+            ::lumen_orm::mongo::MongoRun::find(&mut self.run, &again)
+                .await?
+                .into_iter()
+                .next()
+                .ok_or_else(|| ::lumen_orm::Error::not_found("Post record"))
+        }
+        /// Change every document matching `filter`; how many matched.
+        ///
+        /// # Errors
+        /// A coded error from the database.
+        pub async fn update_many(
+            mut self,
+            filter: ::lumen_orm::Filter,
+            data: Update,
+        ) -> ::lumen_orm::Result<u64> {
+            let set = data.set();
+            if set.is_empty() {
+                return Ok(0);
+            }
+            ::lumen_orm::mongo::MongoRun::update_many(
+                    &mut self.run,
+                    "Post",
+                    Some(&filter),
+                    set,
+                )
+                .await
+        }
+        /// Change the document, or create it when it does not exist. Run it in a transaction
+        /// when two writers may race.
+        ///
+        /// # Errors
+        /// A coded error from the database.
+        pub async fn upsert(
+            mut self,
+            w: UniqueWhere,
+            create: Create,
+            update: Update,
+        ) -> ::lumen_orm::Result<Post> {
+            let mut f = find();
+            f.filter = Some(w.clone().into());
+            f.limit = Some(1);
+            let exists = !::lumen_orm::mongo::MongoRun::find::<Post>(&mut self.run, &f)
+                .await?
+                .is_empty();
+            if exists { self.update(w, update).await } else { self.create(create).await }
+        }
+        /// Remove one document and return it.
+        ///
+        /// # Errors
+        /// P2025 when there is no such document; a coded error otherwise.
+        pub async fn delete(mut self, w: UniqueWhere) -> ::lumen_orm::Result<Post> {
+            let mut f = find();
+            f.filter = Some(w.into());
+            f.limit = Some(1);
+            let Some(current) = ::lumen_orm::mongo::MongoRun::find::<
+                Post,
+            >(&mut self.run, &f)
+                .await?
+                .into_iter()
+                .next() else {
+                return Err(::lumen_orm::Error::not_found("Post record"));
+            };
+            ::lumen_orm::mongo::MongoRun::delete_many(
+                    &mut self.run,
+                    "Post",
+                    Some(&by_id(&current)),
+                )
+                .await?;
+            Ok(current)
+        }
+        /// Remove every document matching `filter` (all of them for `None`); how many.
+        ///
+        /// # Errors
+        /// A coded error from the database.
+        pub async fn delete_many(
+            mut self,
+            filter: Option<::lumen_orm::Filter>,
+        ) -> ::lumen_orm::Result<u64> {
+            ::lumen_orm::mongo::MongoRun::delete_many(
+                    &mut self.run,
+                    "Post",
+                    filter.as_ref(),
+                )
+                .await
+        }
+        /// How many documents match `filter` (all of them for `None`).
+        ///
+        /// # Errors
+        /// A coded error from the database.
+        pub async fn count(
+            mut self,
+            filter: Option<::lumen_orm::Filter>,
+        ) -> ::lumen_orm::Result<u64> {
+            ::lumen_orm::mongo::MongoRun::count(&mut self.run, "Post", filter.as_ref())
+                .await
+        }
+    }
+    /// Documents matching the filters added, in the order asked for.
+    pub struct FindMany<R> {
+        run: R,
+        find: ::lumen_orm::mongo::Find,
+    }
+    impl<R: ::lumen_orm::mongo::MongoRun> FindMany<R> {
+        /// Only documents matching `f` (combined with earlier filters by AND).
+        #[must_use]
+        pub fn filter(mut self, f: ::lumen_orm::Filter) -> Self {
+            self.find.filter = Some(
+                match self.find.filter.take() {
+                    Some(e) => e.and(f),
+                    None => f,
+                },
+            );
+            self
+        }
+        /// Order by a field, for example `account::created_at::desc()`.
+        #[must_use]
+        pub fn order_by(mut self, order: (String, ::lumen_orm::Order)) -> Self {
+            self.find.order.push(order);
+            self
+        }
+        /// At most `n` documents.
+        #[must_use]
+        pub fn take(mut self, n: i64) -> Self {
+            self.find.limit = Some(n);
+            self
+        }
+        /// Skip the first `n` documents.
+        #[must_use]
+        pub fn skip(mut self, n: u64) -> Self {
+            self.find.skip = Some(n);
+            self
+        }
+        /// Run the query.
+        ///
+        /// # Errors
+        /// A coded error from the database.
+        pub async fn exec(mut self) -> ::lumen_orm::Result<Vec<Post>> {
+            ::lumen_orm::mongo::MongoRun::find(&mut self.run, &self.find).await
+        }
+    }
+}
+/// The `Label` model (collection `Label`).
+pub mod label {
+    /// The collection.
+    pub const COLLECTION: &str = "Label";
+    /// A find over this model's documents, for dynamic queries.
+    pub fn find() -> ::lumen_orm::mongo::Find {
+        ::lumen_orm::mongo::Find {
+            collection: COLLECTION.to_owned(),
+            ..::lumen_orm::mongo::Find::default()
+        }
+    }
+    #[derive(
+        Debug,
+        Clone,
+        PartialEq,
+        ::lumen_orm::serde::Serialize,
+        ::lumen_orm::serde::Deserialize
+    )]
+    #[serde(crate = "::lumen_orm::serde")]
+    pub struct Label {
+        #[serde(rename = "_id")]
+        pub id: ::lumen_orm::mongo::ObjectId,
+        #[serde(rename = "name")]
+        pub name: String,
+        #[serde(rename = "postIds")]
+        #[serde(default)]
+        pub post_ids: Vec<::lumen_orm::mongo::ObjectId>,
+    }
+    /// Conditions and ordering on `id`.
+    pub mod id {
+        /// The column.
+        pub const COLUMN: &str = "_id";
+        /// Equal to `v`.
+        pub fn equals(v: ::lumen_orm::mongo::ObjectId) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).equals(::lumen_orm::Value::from(v))
+        }
+        /// Not equal to `v` (rows where it is NULL match too).
+        pub fn not(v: ::lumen_orm::mongo::ObjectId) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).not_equals(::lumen_orm::Value::from(v))
+        }
+        /// One of `values`.
+        pub fn is_in(
+            values: impl IntoIterator<Item = ::lumen_orm::mongo::ObjectId>,
+        ) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN)
+                .is_in(values.into_iter().map(::lumen_orm::Value::from))
+        }
+        /// None of `values`.
+        pub fn not_in(
+            values: impl IntoIterator<Item = ::lumen_orm::mongo::ObjectId>,
+        ) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN)
+                .not_in(values.into_iter().map(::lumen_orm::Value::from))
+        }
+        /// Less than `v`.
+        pub fn lt(v: ::lumen_orm::mongo::ObjectId) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).lt(::lumen_orm::Value::from(v))
+        }
+        /// At most `v`.
+        pub fn lte(v: ::lumen_orm::mongo::ObjectId) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).lte(::lumen_orm::Value::from(v))
+        }
+        /// More than `v`.
+        pub fn gt(v: ::lumen_orm::mongo::ObjectId) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).gt(::lumen_orm::Value::from(v))
+        }
+        /// At least `v`.
+        pub fn gte(v: ::lumen_orm::mongo::ObjectId) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).gte(::lumen_orm::Value::from(v))
+        }
+        /// Smallest first.
+        pub fn asc() -> (String, ::lumen_orm::Order) {
+            (COLUMN.to_owned(), ::lumen_orm::Order::Asc)
+        }
+        /// Largest first.
+        pub fn desc() -> (String, ::lumen_orm::Order) {
+            (COLUMN.to_owned(), ::lumen_orm::Order::Desc)
+        }
+    }
+    /// Conditions and ordering on `name`.
+    pub mod name {
+        /// The column.
+        pub const COLUMN: &str = "name";
+        /// Equal to `v`.
+        pub fn equals(v: impl Into<String>) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).equals(::lumen_orm::Value::from(v.into()))
+        }
+        /// Not equal to `v` (rows where it is NULL match too).
+        pub fn not(v: impl Into<String>) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).not_equals(::lumen_orm::Value::from(v.into()))
+        }
+        /// One of `values`.
+        pub fn is_in(values: impl IntoIterator<Item = String>) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN)
+                .is_in(values.into_iter().map(::lumen_orm::Value::from))
+        }
+        /// None of `values`.
+        pub fn not_in(values: impl IntoIterator<Item = String>) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN)
+                .not_in(values.into_iter().map(::lumen_orm::Value::from))
+        }
+        /// Less than `v`.
+        pub fn lt(v: impl Into<String>) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).lt(::lumen_orm::Value::from(v.into()))
+        }
+        /// At most `v`.
+        pub fn lte(v: impl Into<String>) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).lte(::lumen_orm::Value::from(v.into()))
+        }
+        /// More than `v`.
+        pub fn gt(v: impl Into<String>) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).gt(::lumen_orm::Value::from(v.into()))
+        }
+        /// At least `v`.
+        pub fn gte(v: impl Into<String>) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).gte(::lumen_orm::Value::from(v.into()))
+        }
+        /// Contains the text.
+        pub fn contains(v: impl Into<String>) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).contains(v)
+        }
+        /// Contains the text, ignoring case.
+        pub fn contains_insensitive(v: impl Into<String>) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).contains_insensitive(v)
+        }
+        /// Starts with the text.
+        pub fn starts_with(v: impl Into<String>) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).starts_with(v)
+        }
+        /// Ends with the text.
+        pub fn ends_with(v: impl Into<String>) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).ends_with(v)
+        }
+        /// Starts with the text, ignoring case.
+        pub fn starts_with_insensitive(v: impl Into<String>) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).starts_with_insensitive(v)
+        }
+        /// Ends with the text, ignoring case.
+        pub fn ends_with_insensitive(v: impl Into<String>) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).ends_with_insensitive(v)
+        }
+        /// Equal, ignoring case.
+        pub fn equals_insensitive(v: impl Into<String>) -> ::lumen_orm::Filter {
+            ::lumen_orm::col(COLUMN).equals_insensitive(v)
+        }
+        /// Smallest first.
+        pub fn asc() -> (String, ::lumen_orm::Order) {
+            (COLUMN.to_owned(), ::lumen_orm::Order::Asc)
+        }
+        /// Largest first.
+        pub fn desc() -> (String, ::lumen_orm::Order) {
+            (COLUMN.to_owned(), ::lumen_orm::Order::Desc)
+        }
+    }
+    /// Conditions and ordering on `postIds`.
+    pub mod post_ids {
+        /// The column.
+        pub const COLUMN: &str = "postIds";
+        /// Smallest first.
+        pub fn asc() -> (String, ::lumen_orm::Order) {
+            (COLUMN.to_owned(), ::lumen_orm::Order::Asc)
+        }
+        /// Largest first.
+        pub fn desc() -> (String, ::lumen_orm::Order) {
+            (COLUMN.to_owned(), ::lumen_orm::Order::Desc)
+        }
+    }
+    /// Conditions on the related `Post` records of `posts`, built with `post::..` filters.
+    pub mod posts {
+        fn related() -> ::lumen_orm::Related {
+            ::lumen_orm::Related::id_list(
+                ::lumen_orm::Table::new("Post"),
+                "postIds",
+                "_id",
+            )
+        }
+        /// At least one related record matches `f`.
+        pub fn some(f: ::lumen_orm::Filter) -> ::lumen_orm::Filter {
+            related().some(f)
+        }
+        /// Every related record matches `f` (true when there are none).
+        pub fn every(f: ::lumen_orm::Filter) -> ::lumen_orm::Filter {
+            related().every(f)
+        }
+        /// No related record matches `f`.
+        pub fn none(f: ::lumen_orm::Filter) -> ::lumen_orm::Filter {
+            related().none(f)
+        }
+    }
+    /// The data for a new document. The id (`auto()`) and fields with defaults are `Option`;
+    /// the client fills the defaults, since MongoDB has none.
+    #[derive(Debug, Clone, PartialEq)]
+    pub struct Create {
+        pub id: Option<::lumen_orm::mongo::ObjectId>,
+        pub name: String,
+        pub post_ids: Option<Vec<::lumen_orm::mongo::ObjectId>>,
+    }
+    #[derive(::lumen_orm::serde::Serialize)]
+    #[serde(crate = "::lumen_orm::serde")]
+    struct NewDocument {
+        #[serde(rename = "_id", skip_serializing_if = "Option::is_none")]
+        id: Option<::lumen_orm::mongo::ObjectId>,
+        #[serde(rename = "name")]
+        name: String,
+        #[serde(rename = "postIds", skip_serializing_if = "Option::is_none")]
+        post_ids: Option<Vec<::lumen_orm::mongo::ObjectId>>,
+    }
+    impl Create {
+        fn into_document(self) -> NewDocument {
+            NewDocument {
+                id: self.id,
+                name: self.name,
+                post_ids: self.post_ids,
+            }
+        }
+    }
+    /// The fields to change; `Set::NotSet` (the default) leaves a field as it is.
+    #[derive(Debug, Clone, Default, PartialEq)]
+    pub struct Update {
+        pub id: ::lumen_orm::Set<::lumen_orm::mongo::ObjectId>,
+        pub name: ::lumen_orm::Set<String>,
+        pub post_ids: ::lumen_orm::Set<Vec<::lumen_orm::mongo::ObjectId>>,
+    }
+    impl Update {
+        fn set(self) -> Vec<(String, ::lumen_orm::Value)> {
+            let mut set = Vec::new();
+            if let ::lumen_orm::Set::To(v) = self.id {
+                set.push(("_id".to_owned(), ::lumen_orm::Value::from(v)));
+            }
+            if let ::lumen_orm::Set::To(v) = self.name {
+                set.push(("name".to_owned(), ::lumen_orm::Value::from(v)));
+            }
+            if let ::lumen_orm::Set::To(v) = self.post_ids {
+                set.push(("postIds".to_owned(), ::lumen_orm::Value::from(v)));
+            }
+            set
+        }
+    }
+    /// One record, by its id or a unique key.
+    #[derive(Debug, Clone, PartialEq)]
+    pub enum UniqueWhere {
+        Id(::lumen_orm::mongo::ObjectId),
+        Name(String),
+    }
+    impl UniqueWhere {
+        fn columns(&self) -> Vec<String> {
+            match self {
+                Self::Id(_) => vec!["_id".to_owned()],
+                Self::Name(_) => vec!["name".to_owned()],
+            }
+        }
+    }
+    impl From<UniqueWhere> for ::lumen_orm::Filter {
+        fn from(w: UniqueWhere) -> Self {
+            match w {
+                UniqueWhere::Id(v) => {
+                    ::lumen_orm::col("_id").equals(::lumen_orm::Value::from(v))
+                }
+                UniqueWhere::Name(v) => {
+                    ::lumen_orm::col("name").equals(::lumen_orm::Value::from(v))
+                }
+            }
+        }
+    }
+    fn by_id(r: &Label) -> ::lumen_orm::Filter {
+        ::lumen_orm::col("_id").equals(::lumen_orm::Value::from(r.id.clone()))
+    }
+    /// The operations on this model, on the database or in a transaction.
+    pub struct Actions<R> {
+        run: R,
+    }
+    /// The operations, on any [`::lumen_orm::mongo::MongoRun`] (for example `&mut tx`).
+    pub fn on<R: ::lumen_orm::mongo::MongoRun>(run: R) -> Actions<R> {
+        Actions { run }
+    }
+    impl<R: ::lumen_orm::mongo::MongoRun> Actions<R> {
+        /// Documents matching the filters you add.
+        #[must_use]
+        pub fn find_many(self) -> FindMany<R> {
+            FindMany {
+                run: self.run,
+                find: find(),
+            }
+        }
+        /// The document with this id or unique key.
+        ///
+        /// # Errors
+        /// A coded error from the database.
+        pub async fn find_unique(
+            mut self,
+            w: UniqueWhere,
+        ) -> ::lumen_orm::Result<Option<Label>> {
+            let mut f = find();
+            f.filter = Some(w.into());
+            f.limit = Some(1);
+            Ok(
+                ::lumen_orm::mongo::MongoRun::find(&mut self.run, &f)
+                    .await?
+                    .into_iter()
+                    .next(),
+            )
+        }
+        /// The first document matching `filter`.
+        ///
+        /// # Errors
+        /// A coded error from the database.
+        pub async fn find_first(
+            self,
+            filter: ::lumen_orm::Filter,
+        ) -> ::lumen_orm::Result<Option<Label>> {
+            Ok(self.find_many().filter(filter).take(1).exec().await?.into_iter().next())
+        }
+        /// Store a new document and return it.
+        ///
+        /// # Errors
+        /// P2002 when a unique index is hit; a coded error otherwise.
+        pub async fn create(mut self, data: Create) -> ::lumen_orm::Result<Label> {
+            let ids = ::lumen_orm::mongo::MongoRun::insert_many(
+                    &mut self.run,
+                    "Label",
+                    &[data.into_document()],
+                )
+                .await?;
+            let id = ids
+                .first()
+                .map(::lumen_orm::mongo::value_of_bson)
+                .unwrap_or(::lumen_orm::Value::Null);
+            let mut f = find();
+            f.filter = Some(::lumen_orm::col("_id").equals(id));
+            ::lumen_orm::mongo::MongoRun::find(&mut self.run, &f)
+                .await?
+                .into_iter()
+                .next()
+                .ok_or_else(|| ::lumen_orm::Error::not_found("Label record"))
+        }
+        /// Store many documents; the number stored.
+        ///
+        /// # Errors
+        /// A coded error from the database.
+        pub async fn create_many(
+            mut self,
+            data: Vec<Create>,
+        ) -> ::lumen_orm::Result<u64> {
+            let docs: Vec<NewDocument> = data
+                .into_iter()
+                .map(Create::into_document)
+                .collect();
+            let ids = ::lumen_orm::mongo::MongoRun::insert_many(
+                    &mut self.run,
+                    "Label",
+                    &docs,
+                )
+                .await?;
+            Ok(ids.len() as u64)
+        }
+        /// Change one document and return it (found first, so a changed unique key is fine).
+        ///
+        /// # Errors
+        /// P2025 when there is no such document; a coded error otherwise.
+        pub async fn update(
+            mut self,
+            w: UniqueWhere,
+            data: Update,
+        ) -> ::lumen_orm::Result<Label> {
+            let mut f = find();
+            f.filter = Some(w.into());
+            f.limit = Some(1);
+            let Some(current) = ::lumen_orm::mongo::MongoRun::find::<
+                Label,
+            >(&mut self.run, &f)
+                .await?
+                .into_iter()
+                .next() else {
+                return Err(::lumen_orm::Error::not_found("Label record"));
+            };
+            let set = data.set();
+            if !set.is_empty() {
+                ::lumen_orm::mongo::MongoRun::update_many(
+                        &mut self.run,
+                        "Label",
+                        Some(&by_id(&current)),
+                        set,
+                    )
+                    .await?;
+            }
+            let mut again = find();
+            again.filter = Some(by_id(&current));
+            ::lumen_orm::mongo::MongoRun::find(&mut self.run, &again)
+                .await?
+                .into_iter()
+                .next()
+                .ok_or_else(|| ::lumen_orm::Error::not_found("Label record"))
+        }
+        /// Change every document matching `filter`; how many matched.
+        ///
+        /// # Errors
+        /// A coded error from the database.
+        pub async fn update_many(
+            mut self,
+            filter: ::lumen_orm::Filter,
+            data: Update,
+        ) -> ::lumen_orm::Result<u64> {
+            let set = data.set();
+            if set.is_empty() {
+                return Ok(0);
+            }
+            ::lumen_orm::mongo::MongoRun::update_many(
+                    &mut self.run,
+                    "Label",
+                    Some(&filter),
+                    set,
+                )
+                .await
+        }
+        /// Change the document, or create it when it does not exist. Run it in a transaction
+        /// when two writers may race.
+        ///
+        /// # Errors
+        /// A coded error from the database.
+        pub async fn upsert(
+            mut self,
+            w: UniqueWhere,
+            create: Create,
+            update: Update,
+        ) -> ::lumen_orm::Result<Label> {
+            let mut f = find();
+            f.filter = Some(w.clone().into());
+            f.limit = Some(1);
+            let exists = !::lumen_orm::mongo::MongoRun::find::<Label>(&mut self.run, &f)
+                .await?
+                .is_empty();
+            if exists { self.update(w, update).await } else { self.create(create).await }
+        }
+        /// Remove one document and return it.
+        ///
+        /// # Errors
+        /// P2025 when there is no such document; a coded error otherwise.
+        pub async fn delete(mut self, w: UniqueWhere) -> ::lumen_orm::Result<Label> {
+            let mut f = find();
+            f.filter = Some(w.into());
+            f.limit = Some(1);
+            let Some(current) = ::lumen_orm::mongo::MongoRun::find::<
+                Label,
+            >(&mut self.run, &f)
+                .await?
+                .into_iter()
+                .next() else {
+                return Err(::lumen_orm::Error::not_found("Label record"));
+            };
+            ::lumen_orm::mongo::MongoRun::delete_many(
+                    &mut self.run,
+                    "Label",
+                    Some(&by_id(&current)),
+                )
+                .await?;
+            Ok(current)
+        }
+        /// Remove every document matching `filter` (all of them for `None`); how many.
+        ///
+        /// # Errors
+        /// A coded error from the database.
+        pub async fn delete_many(
+            mut self,
+            filter: Option<::lumen_orm::Filter>,
+        ) -> ::lumen_orm::Result<u64> {
+            ::lumen_orm::mongo::MongoRun::delete_many(
+                    &mut self.run,
+                    "Label",
+                    filter.as_ref(),
+                )
+                .await
+        }
+        /// How many documents match `filter` (all of them for `None`).
+        ///
+        /// # Errors
+        /// A coded error from the database.
+        pub async fn count(
+            mut self,
+            filter: Option<::lumen_orm::Filter>,
+        ) -> ::lumen_orm::Result<u64> {
+            ::lumen_orm::mongo::MongoRun::count(&mut self.run, "Label", filter.as_ref())
+                .await
+        }
+    }
+    /// Documents matching the filters added, in the order asked for.
+    pub struct FindMany<R> {
+        run: R,
+        find: ::lumen_orm::mongo::Find,
+    }
+    impl<R: ::lumen_orm::mongo::MongoRun> FindMany<R> {
+        /// Only documents matching `f` (combined with earlier filters by AND).
+        #[must_use]
+        pub fn filter(mut self, f: ::lumen_orm::Filter) -> Self {
+            self.find.filter = Some(
+                match self.find.filter.take() {
+                    Some(e) => e.and(f),
+                    None => f,
+                },
+            );
+            self
+        }
+        /// Order by a field, for example `account::created_at::desc()`.
+        #[must_use]
+        pub fn order_by(mut self, order: (String, ::lumen_orm::Order)) -> Self {
+            self.find.order.push(order);
+            self
+        }
+        /// At most `n` documents.
+        #[must_use]
+        pub fn take(mut self, n: i64) -> Self {
+            self.find.limit = Some(n);
+            self
+        }
+        /// Skip the first `n` documents.
+        #[must_use]
+        pub fn skip(mut self, n: u64) -> Self {
+            self.find.skip = Some(n);
+            self
+        }
+        /// Run the query.
+        ///
+        /// # Errors
+        /// A coded error from the database.
+        pub async fn exec(mut self) -> ::lumen_orm::Result<Vec<Label>> {
+            ::lumen_orm::mongo::MongoRun::find(&mut self.run, &self.find).await
+        }
+    }
+}
 /// The client: one accessor per model.
 #[derive(Debug, Clone)]
 pub struct Client {
@@ -2340,7 +3580,9 @@ impl Client {
     /// Use an existing connection.
     #[must_use]
     pub fn new(db: ::lumen_orm::mongo::MongoDb) -> Self {
-        Self { db }
+        Self {
+            db: db.with_constraints(constraints()),
+        }
     }
     /// The connection, for transactions (`client.db().transaction(..)`) and dynamic queries.
     #[must_use]
@@ -2362,4 +3604,32 @@ impl Client {
     pub fn settings(&self) -> settings::Actions<&::lumen_orm::mongo::MongoDb> {
         settings::on(&self.db)
     }
+    /// Operations on `Post`.
+    #[must_use]
+    pub fn post(&self) -> post::Actions<&::lumen_orm::mongo::MongoDb> {
+        post::on(&self.db)
+    }
+    /// Operations on `Label`.
+    #[must_use]
+    pub fn label(&self) -> label::Actions<&::lumen_orm::mongo::MongoDb> {
+        label::on(&self.db)
+    }
+}
+fn constraints() -> ::std::collections::HashMap<String, Vec<String>> {
+    ::std::collections::HashMap::from([
+        ("Account.Account_email_key".to_owned(), vec!["email".to_owned()]),
+        ("Account._id_".to_owned(), vec!["id".to_owned()]),
+        ("Label.Label_name_key".to_owned(), vec!["name".to_owned()]),
+        ("Label._id_".to_owned(), vec!["id".to_owned()]),
+        (
+            "Post.Post_lang_heading_key".to_owned(),
+            vec!["lang".to_owned(), "title".to_owned()],
+        ),
+        ("Post.Post_url_slug_key".to_owned(), vec!["slug".to_owned()]),
+        ("Post._id_".to_owned(), vec!["id".to_owned()]),
+        ("Session.Session_token_key".to_owned(), vec!["token".to_owned()]),
+        ("Session._id_".to_owned(), vec!["id".to_owned()]),
+        ("Settings.Settings_accountId_key".to_owned(), vec!["accountId".to_owned()]),
+        ("Settings._id_".to_owned(), vec!["id".to_owned()]),
+    ])
 }
