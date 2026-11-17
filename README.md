@@ -7,7 +7,7 @@ for the queries a generated client cannot express. It works with Postgres and Mo
 It reads the same `schema.prisma` files Prisma reads and keeps migrations in the same folders and
 history table. A project can switch between the two tools, in either direction.
 
-**Status:** 0.1 in development, not on crates.io yet.
+**Status:** 0.1. Tested on Postgres 16 and MongoDB 7. The Limits section lists what waits for 0.2.
 
 ```console
 $ lumen init
