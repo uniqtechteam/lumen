@@ -421,7 +421,8 @@ pub enum RelationKind {
     OneToOne,
     /// One side has many.
     OneToMany,
-    /// Both sides have many, through a join table the database keeps (`_AToB`).
+    /// Both sides have many: through a join table the database keeps (`_AToB`), or on MongoDB
+    /// through a list of ids on each side.
     ManyToMany,
 }
 
@@ -447,8 +448,13 @@ pub struct Relation {
     pub b: FieldRef,
     /// For one-to-one and one-to-many: the foreign key fields on `a`'s model.
     pub fields: Vec<usize>,
-    /// For one-to-one and one-to-many: the referenced fields on `b`'s model.
+    /// For one-to-one and one-to-many: the referenced fields on `b`'s model. For a MongoDB
+    /// many-to-many, `fields` is the id list on `a`'s model and `references` the field it holds.
     pub references: Vec<usize>,
+    /// For a MongoDB many-to-many: the id list on `b`'s model.
+    pub b_fields: Vec<usize>,
+    /// For a MongoDB many-to-many: the field on `a`'s model that `b_fields` holds.
+    pub b_references: Vec<usize>,
     /// `onDelete`.
     pub on_delete: Option<ReferentialAction>,
     /// `onUpdate`.

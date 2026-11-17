@@ -240,6 +240,65 @@ fn check_foreign_key(
     Some((fields, references))
 }
 
+/// Check one side of a MongoDB many-to-many: `fields` names one list field on its own model holding
+/// the values of one unique field of the other model (`fields: [tagIds], references: [id]`).
+fn check_id_list(
+    schema: &Schema,
+    side: &Side,
+    d: &mut Diagnostics,
+) -> Option<(Vec<usize>, Vec<usize>)> {
+    let label = format!(
+        "`{}` on `{}`",
+        schema.field(side.at).name,
+        schema.models[side.at.model.0].name
+    );
+    if side.fields.len() != 1 || side.references.len() != 1 {
+        d.push(Diagnostic::relation_help(
+            side.span,
+            format!("{label}: a many-to-many relation on MongoDB names one id list and one referenced field"),
+            "write `@relation(fields: [otherIds], references: [id])`",
+        ));
+        return None;
+    }
+    let fields = resolve_names(schema, side.at.model, &side.fields, d)?;
+    let references = resolve_names(schema, side.target, &side.references, d)?;
+    let list = &schema.models[side.at.model.0].fields[fields[0]];
+    let target = &schema.models[side.target.0];
+    let key = &target.fields[references[0]];
+    if list.arity != Arity::List {
+        d.push(Diagnostic::relation_help(
+            side.span,
+            format!("{label}: `{}` must be a list of ids", list.name),
+            format!(
+                "declare it as a list, for example `{} String[] @db.ObjectId`",
+                list.name
+            ),
+        ));
+        return None;
+    }
+    if list.kind != key.kind {
+        d.push(Diagnostic::relation(
+            side.span,
+            format!(
+                "{label}: `{}` and `{}.{}` have different types",
+                list.name, target.name, key.name
+            ),
+        ));
+        return None;
+    }
+    if !target.is_unique_set(&references) {
+        d.push(Diagnostic::relation_help(
+            side.span,
+            format!(
+                "{label}: the referenced field is not unique on `{}`",
+                target.name
+            ),
+            "reference the id, or a field marked `@unique` on the other model",
+        ));
+    }
+    Some((fields, references))
+}
+
 fn has_fk(side: &Side) -> bool {
     !side.fields.is_empty() || !side.references.is_empty()
 }
@@ -266,17 +325,23 @@ fn classify(
                 ));
                 return None;
             }
-            if has_fk(x) || has_fk(y) {
+            if schema.provider() == Provider::MongoDb {
+                if let Some(side) = [x, y].into_iter().find(|s| !has_fk(s)) {
+                    let target = &schema.models[side.target.0];
+                    let list = format!("{}Ids", lower_first(&target.name));
+                    d.push(Diagnostic::relation_help(
+                        side.span,
+                        "a many-to-many relation on MongoDB keeps a list of ids on both sides",
+                        format!(
+                            "add a `{list}` list field and `@relation(fields: [{list}], references: [id])`"
+                        ),
+                    ));
+                    return None;
+                }
+            } else if has_fk(x) || has_fk(y) {
                 d.push(Diagnostic::relation(
                     x.span,
                     "an implicit many-to-many relation cannot have `fields` or `references`",
-                ));
-                return None;
-            }
-            if schema.provider() == Provider::MongoDb {
-                d.push(Diagnostic::relation(
-                    x.span,
-                    "many-to-many relations on MongoDB are not supported in lumen 0.1",
                 ));
                 return None;
             }
@@ -405,13 +470,20 @@ pub(super) fn pair_all(ast: &ast::SchemaAst, schema: &mut Schema, d: &mut Diagno
         } else {
             (right, left)
         };
-        let (fields, references) = if kind == RelationKind::ManyToMany {
-            (Vec::new(), Vec::new())
-        } else {
+        let ((fields, references), (b_fields, b_references)) = if kind != RelationKind::ManyToMany {
             match check_foreign_key(schema, &holder, kind, d) {
-                Some(pair) => pair,
+                Some(pair) => (pair, (Vec::new(), Vec::new())),
                 None => continue,
             }
+        } else if schema.provider() == Provider::MongoDb {
+            let a = check_id_list(schema, &holder, d);
+            let b = check_id_list(schema, &other, d);
+            match (a, b) {
+                (Some(a), Some(b)) => (a, b),
+                _ => continue,
+            }
+        } else {
+            ((Vec::new(), Vec::new()), (Vec::new(), Vec::new()))
         };
         let default_name = {
             let mut models = [
@@ -431,6 +503,8 @@ pub(super) fn pair_all(ast: &ast::SchemaAst, schema: &mut Schema, d: &mut Diagno
             b: other.at,
             fields,
             references,
+            b_fields,
+            b_references,
             on_delete: holder.on_delete.map(|(action, _)| action),
             on_update: holder.on_update.map(|(action, _)| action),
             mapped_name: holder.map,
