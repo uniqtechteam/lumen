@@ -5,6 +5,11 @@ all-features = true
 [advisories]
 version = 2
 yanked = "deny"
+ignore = [
+    # chrono is marked unmaintained (no vulnerability). sqlx depends on it too, so lumen cannot drop it
+    # alone. A `time` or `jiff` option for generated clients is planned for 0.2.
+    { id = "RUSTSEC-2026-0543", reason = "chrono unmaintained; sqlx needs it; time/jiff option planned for 0.2" },
+]
 
 [licenses]
 version = 2
