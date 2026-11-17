@@ -121,9 +121,9 @@ On MongoDB the client is made from a URL that names the database:
 `Client::new(lumen_orm::mongo::MongoDb::connect_url(&url).await?)`, or
 `Client::connect(&url, "app")` to name the database apart from the URL.
 
-Errors carry stable codes. For example, `err.code == "P2002"` is a duplicate, and on Postgres
-`err.fields` names the columns. On MongoDB `err.fields` is empty in 0.1; the message names the
-index. `err.http_status()` gives the status a web API should answer with.
+Errors carry stable codes. For example, `err.code == "P2002"` is a duplicate, and `err.fields`
+names the schema fields of the unique constraint (or MongoDB index) it broke, `["email"]` or
+`["lang", "title"]`. `err.http_status()` gives the status a web API should answer with.
 
 ## Filters
 
@@ -148,6 +148,30 @@ To-many relations have `some`, `every` and `none`. To-one relations have `is` an
 `is_null` and `is_not_null` when the relation is optional. They nest, so
 `user::posts::some(post::tags::some(tag::name::equals("rust")))` works too. Note that `every` is
 true for a user with no posts, and `is_not` matches a post with no author.
+
+On MongoDB a many-to-many relation keeps a list of ids on both sides, and the filters work the same:
+
+```prisma
+model Post {
+  id       String   @id @default(auto()) @map("_id") @db.ObjectId
+  labelIds String[] @db.ObjectId
+  labels   Label[]  @relation(fields: [labelIds], references: [id])
+
+  @@index([labelIds])
+}
+
+model Label {
+  id      String   @id @default(auto()) @map("_id") @db.ObjectId
+  postIds String[] @db.ObjectId
+  posts   Post[]   @relation(fields: [postIds], references: [id])
+}
+```
+
+`post::labels::some(..)` first collects the ids of the labels that match, with one aggregation,
+then finds the posts whose `labelIds` holds one of them. The index on `labelIds` lets that second
+step use an index. Ids in the list that point at a deleted label are ignored. Keeping the two
+lists in step is up to your code for now; lumen does not update one when the other changes, and
+many-to-many includes are not in the generated client yet.
 
 | Field filter | Matches |
 | --- | --- |
@@ -276,7 +300,7 @@ its error rolls back the whole thing.
 | `db push` | tables, columns, indexes, foreign keys, enums | collections and indexes |
 | `db pull` | 0.2 | by sampling documents |
 | Generated client: filters, ordering, paging, create, update, upsert, delete, count | yes | yes |
-| Relation filters (`some`, `every`, `none`, `is`, `is_not`) | yes (`EXISTS`) | yes, except many-to-many (one extra statement per relation filter) |
+| Relation filters (`some`, `every`, `none`, `is`, `is_not`) | yes (`EXISTS`) | yes, many-to-many through id lists (one extra statement per relation filter) |
 | Includes, one statement per level | yes | yes (`$in`) |
 | Nested writes: create with nested `create` and `connect` | yes | yes |
 | Transactions | yes, with isolation levels | yes, on a replica set |
@@ -325,6 +349,10 @@ Without a terminal, a command that would lose data stops and asks you to pass
   - a test matrix over Postgres 13 to 17, plus database tests on macOS and Windows
   - checking the parser and formatter against large real-world schemas. In 0.1 they are only
     checked against the schemas in lumen's own tests.
+- On MongoDB a relation filter sends the keys of every related document that matches to the
+  outer query as one `$in` list. A condition that matches hundreds of thousands of related
+  documents makes a large query, and at around 800,000 ObjectIds it reaches MongoDB's 16 MB
+  document limit. Keep such conditions narrow, or filter the other way round.
 - Nested writes in 0.1 are `create` and `connect` inside a create, on one-to-one and one-to-many
   relations with a single-column key. `connect_or_create`, `disconnect`, `set` and nested writes
   inside `update` come later.

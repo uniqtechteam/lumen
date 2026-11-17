@@ -252,3 +252,53 @@ fn rename_hints_reach_the_checked_schema() {
     assert_eq!(user.renamed_from.as_deref(), Some("accounts"));
     assert_eq!(user.fields[1].renamed_from.as_deref(), Some("full_name"));
 }
+
+const MONGO: &str = "datasource db {\n  provider = \"mongodb\"\n  url = env(\"DATABASE_URL\")\n}\n";
+
+#[test]
+fn mongodb_many_to_many_keeps_id_lists_on_both_sides() {
+    let schema = format!(
+        "{MONGO}model Post {{\n  id String @id @default(auto()) @map(\"_id\") @db.ObjectId\n  tagIds String[] @db.ObjectId\n  tags Tag[] @relation(fields: [tagIds], references: [id])\n}}\nmodel Tag {{\n  id String @id @default(auto()) @map(\"_id\") @db.ObjectId\n  postIds String[] @db.ObjectId\n  posts Post[] @relation(fields: [postIds], references: [id])\n}}\n"
+    );
+    let s = ok("schema.prisma", &schema);
+    let r = &s.relations[0];
+    assert_eq!(r.kind, RelationKind::ManyToMany);
+    assert_eq!(s.models[r.a.model.0].name, "Post");
+    assert_eq!(
+        (r.fields.as_slice(), r.references.as_slice()),
+        (&[1][..], &[0][..])
+    );
+    assert_eq!(
+        (r.b_fields.as_slice(), r.b_references.as_slice()),
+        (&[1][..], &[0][..])
+    );
+
+    let one_side = schema.replace(
+        "posts Post[] @relation(fields: [postIds], references: [id])",
+        "posts Post[]",
+    );
+    let (message, help) = first_error(&one_side);
+    assert_eq!(
+        message,
+        "a many-to-many relation on MongoDB keeps a list of ids on both sides"
+    );
+    assert_eq!(
+        help.as_deref(),
+        Some("add a `postIds` list field and `@relation(fields: [postIds], references: [id])`")
+    );
+
+    let not_a_list = schema.replace("tagIds String[]", "tagIds String");
+    assert_eq!(
+        first_error(&not_a_list).0,
+        "`tags` on `Post`: `tagIds` must be a list of ids"
+    );
+
+    let on_postgres = schema
+        .replace("\"mongodb\"", "\"postgresql\"")
+        .replace(" @default(auto()) @map(\"_id\")", "")
+        .replace(" @db.ObjectId", "");
+    assert_eq!(
+        first_error(&on_postgres).0,
+        "an implicit many-to-many relation cannot have `fields` or `references`"
+    );
+}

@@ -92,6 +92,14 @@ pub enum Link {
         /// `(join column, related column)` pairs.
         related: Vec<(String, String)>,
     },
+    /// Many-to-many kept as a list of ids on each side (MongoDB): this row's `list` holds the
+    /// related rows' `key` values. Ids in the list that match no related row are ignored.
+    IdList {
+        /// This row's list of related keys.
+        list: String,
+        /// The related column those keys refer to.
+        key: String,
+    },
 }
 
 /// The related rows a relation filter looks at: where they are, how they link, which must match.
@@ -131,6 +139,20 @@ impl Related {
                 table: through,
                 this: pairs(this),
                 related: pairs(related),
+            },
+            filter: Filter::And(Vec::new()),
+        }
+    }
+
+    /// Rows of `table` whose `key` is in this row's `list` field: a many-to-many relation kept as
+    /// id lists on both sides, as on MongoDB.
+    #[must_use]
+    pub fn id_list(table: Table, list: &str, key: &str) -> Self {
+        Self {
+            table,
+            link: Link::IdList {
+                list: list.to_owned(),
+                key: key.to_owned(),
             },
             filter: Filter::And(Vec::new()),
         }

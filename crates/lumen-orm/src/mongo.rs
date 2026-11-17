@@ -2,8 +2,10 @@
 //! `not` keeps documents where the field is null or missing. Relation filters run as
 //! one extra statement per relation filter (see `relations`).
 
+mod errors;
 mod relations;
 
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -17,6 +19,7 @@ use crate::error::{Error, Result};
 use crate::filter::{Filter, Mode, Op};
 use crate::query::Order;
 use crate::value::Value;
+use errors::{mongo_err, write_err};
 use relations::{Exec, resolve_opt};
 
 /// The BSON types the generated MongoDB client uses.
@@ -204,39 +207,6 @@ pub struct Find {
     pub fields: Vec<String>,
 }
 
-fn mongo_err(e: &mongodb::error::Error) -> Error {
-    let message = e.to_string();
-    if let mongodb::error::ErrorKind::Write(mongodb::error::WriteFailure::WriteError(w)) =
-        e.kind.as_ref()
-        && w.code == 11000
-    {
-        return Error::new(
-            "P2002",
-            format!(
-                "a record with the same unique value already exists ({})",
-                w.message
-            ),
-        );
-    }
-    if let mongodb::error::ErrorKind::InsertMany(m) = e.kind.as_ref()
-        && m.write_errors
-            .as_ref()
-            .is_some_and(|ws| ws.iter().any(|w| w.code == 11000))
-    {
-        return Error::new(
-            "P2002",
-            "a record with the same unique value already exists",
-        );
-    }
-    if message.contains("Transaction numbers are only allowed") || message.contains("replica set") {
-        return Error::new(
-            "P2010",
-            format!("MongoDB transactions need a replica set or a sharded cluster ({message})"),
-        );
-    }
-    Error::new("P2010", message)
-}
-
 /// The query and options of a find.
 fn find_parts(find: &Find) -> Result<(Document, FindOptions)> {
     let filter = find
@@ -307,6 +277,7 @@ fn per_key_pipeline(find: &Find, key: &str, n: i64) -> Result<Vec<Document>> {
 pub struct MongoDb {
     db: mongodb::Database,
     statements: Arc<AtomicU64>,
+    constraints: Arc<HashMap<String, Vec<String>>>,
 }
 
 impl MongoDb {
@@ -345,6 +316,17 @@ impl MongoDb {
         Self {
             db,
             statements: Arc::new(AtomicU64::new(0)),
+            constraints: Arc::default(),
+        }
+    }
+
+    /// Name the fields behind unique indexes in duplicate (P2002) errors: `constraints` maps
+    /// `"Collection.index"` to field names. The generated client sets this from the schema.
+    #[must_use]
+    pub fn with_constraints(self, constraints: HashMap<String, Vec<String>>) -> Self {
+        Self {
+            constraints: Arc::new(constraints),
+            ..self
         }
     }
 
@@ -460,6 +442,7 @@ impl MongoDb {
             db: self.db.clone(),
             session,
             statements: Arc::clone(&self.statements),
+            constraints: Arc::clone(&self.constraints),
         };
         match f(&mut tx).await {
             Ok(v) => {
@@ -513,7 +496,7 @@ impl MongoDb {
             .collection::<T>(collection)
             .insert_many(docs)
             .await
-            .map_err(|e| mongo_err(&e))?;
+            .map_err(|e| write_err(&e, collection, &self.constraints))?;
         let mut ids: Vec<(usize, Bson)> = result.inserted_ids.into_iter().collect();
         ids.sort_by_key(|(i, _)| *i);
         Ok(ids.into_iter().map(|(_, id)| id).collect())
@@ -545,7 +528,7 @@ impl MongoDb {
             .update_many(filter, doc! { "$set": fields })
             .await
             .map(|r| r.matched_count)
-            .map_err(|e| mongo_err(&e))
+            .map_err(|e| write_err(&e, collection, &self.constraints))
     }
 
     /// Remove the matching documents; how many.
@@ -575,6 +558,7 @@ pub struct MongoTx {
     db: mongodb::Database,
     session: ClientSession,
     statements: Arc<AtomicU64>,
+    constraints: Arc<HashMap<String, Vec<String>>>,
 }
 
 /// Something MongoDB operations run on: the database (`&MongoDb`) or a transaction (`MongoTx`).
@@ -807,7 +791,7 @@ impl MongoRun for MongoTx {
             .insert_many(docs)
             .session(&mut self.session)
             .await
-            .map_err(|e| mongo_err(&e))?;
+            .map_err(|e| write_err(&e, collection, &self.constraints))?;
         let mut ids: Vec<(usize, Bson)> = result.inserted_ids.into_iter().collect();
         ids.sort_by_key(|(i, _)| *i);
         Ok(ids.into_iter().map(|(_, id)| id).collect())
@@ -836,7 +820,7 @@ impl MongoRun for MongoTx {
             .session(&mut self.session)
             .await
             .map(|r| r.matched_count)
-            .map_err(|e| mongo_err(&e))
+            .map_err(|e| write_err(&e, collection, &self.constraints))
     }
 
     async fn delete_many(&mut self, collection: &str, filter: Option<&Filter>) -> Result<u64> {

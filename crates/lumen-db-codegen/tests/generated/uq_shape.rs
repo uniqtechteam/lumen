@@ -1017,7 +1017,9 @@ impl Client {
     /// Use an existing connection.
     #[must_use]
     pub fn new(db: ::lumen_orm::mongo::MongoDb) -> Self {
-        Self { db }
+        Self {
+            db: db.with_constraints(constraints()),
+        }
     }
     /// The connection, for transactions (`client.db().transaction(..)`) and dynamic queries.
     #[must_use]
@@ -1029,4 +1031,7 @@ impl Client {
     pub fn note(&self) -> note::Actions<&::lumen_orm::mongo::MongoDb> {
         note::on(&self.db)
     }
+}
+fn constraints() -> ::std::collections::HashMap<String, Vec<String>> {
+    ::std::collections::HashMap::from([("notes._id_".to_owned(), vec!["id".to_owned()])])
 }

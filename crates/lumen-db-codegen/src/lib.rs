@@ -184,6 +184,45 @@ fn client(schema: &Schema, models: &[ModelId]) -> TokenStream {
     }
 }
 
+/// `"Collection.index"` → schema field names for the unique indexes `db push` creates (and the
+/// built-in `_id_`), so a duplicate names fields (`email`) instead of an index.
+fn mongo_constraints(schema: &Schema) -> TokenStream {
+    let collections = lumen_migrate::mongo::calculate(schema);
+    let mut map: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    for model in schema
+        .models
+        .iter()
+        .filter(|m| m.kind == ModelKind::Model && !m.ignored)
+    {
+        let collection = model.database_name();
+        let field_of = |name: &str| {
+            model
+                .fields
+                .iter()
+                .find(|f| f.database_name() == name)
+                .map_or_else(|| name.to_owned(), |f| f.name.clone())
+        };
+        map.insert(format!("{collection}._id_"), vec![field_of("_id")]);
+        let Some(c) = collections.iter().find(|c| c.name == collection) else {
+            continue;
+        };
+        for i in c.indexes.iter().filter(|i| i.unique) {
+            map.insert(
+                format!("{collection}.{}", i.name),
+                i.keys.iter().map(|(k, _)| field_of(k)).collect(),
+            );
+        }
+    }
+    let entries = map
+        .iter()
+        .map(|(name, fields)| quote!((#name.to_owned(), vec![#(#fields.to_owned()),*])));
+    quote! {
+        fn constraints() -> ::std::collections::HashMap<String, Vec<String>> {
+            ::std::collections::HashMap::from([#(#entries),*])
+        }
+    }
+}
+
 fn mongo_client(schema: &Schema, models: &[ModelId]) -> TokenStream {
     let accessors = models.iter().map(|id| {
         let m = &schema.models[id.0];
@@ -195,6 +234,7 @@ fn mongo_client(schema: &Schema, models: &[ModelId]) -> TokenStream {
             pub fn #module(&self) -> #module::Actions<&::lumen_orm::mongo::MongoDb> { #module::on(&self.db) }
         }
     });
+    let constraints = mongo_constraints(schema);
     quote! {
         /// The client: one accessor per model.
         #[derive(Debug, Clone)]
@@ -211,7 +251,9 @@ fn mongo_client(schema: &Schema, models: &[ModelId]) -> TokenStream {
 
             /// Use an existing connection.
             #[must_use]
-            pub fn new(db: ::lumen_orm::mongo::MongoDb) -> Self { Self { db } }
+            pub fn new(db: ::lumen_orm::mongo::MongoDb) -> Self {
+                Self { db: db.with_constraints(constraints()) }
+            }
 
             /// The connection, for transactions (`client.db().transaction(..)`) and dynamic queries.
             #[must_use]
@@ -219,6 +261,8 @@ fn mongo_client(schema: &Schema, models: &[ModelId]) -> TokenStream {
 
             #(#accessors)*
         }
+
+        #constraints
     }
 }
 
