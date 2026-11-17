@@ -103,7 +103,7 @@ pub(crate) fn field_module(schema: &Schema, f: &Field) -> TokenStream {
         fns.push(quote! {
             /// Equal to `v`.
             pub fn equals(v: #arg) -> ::lumen_orm::Filter { ::lumen_orm::col(COLUMN).equals(#conv) }
-            /// Not equal to `v` (rows where it is NULL match too, as in Prisma).
+            /// Not equal to `v` (rows where it is NULL match too).
             pub fn not(v: #arg) -> ::lumen_orm::Filter { ::lumen_orm::col(COLUMN).not_equals(#conv) }
             /// One of `values`.
             pub fn is_in(values: impl IntoIterator<Item = #base>) -> ::lumen_orm::Filter {

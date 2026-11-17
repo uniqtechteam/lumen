@@ -1,4 +1,4 @@
-//! Conditions for `WHERE`, with Prisma's operators: equals, not, in, notIn, lt, lte, gt, gte,
+//! Conditions for `WHERE`: equals, not, in, notIn, lt, lte, gt, gte,
 //! contains, startsWith, endsWith (optionally case-insensitive), null checks, AND, OR, NOT, and
 //! the relation filters some, every, none, is and isNot.
 
@@ -59,7 +59,7 @@ pub enum Filter {
     Column(String, Op),
     /// `("a", "b") IN (($1, $2), ..)`: loading by composite keys.
     Tuples(Vec<String>, Vec<Vec<Value>>),
-    /// A condition on related rows: Prisma's `some`, `every`, `none`, `is` and `isNot`.
+    /// A condition on related rows: `some`, `every`, `none`, `is` and `isNot`.
     Relation(Quantifier, Box<Related>),
 }
 
@@ -147,7 +147,7 @@ impl Related {
         self.quantified(Quantifier::Some, filter)
     }
 
-    /// Every related row matches `filter` (true when there are none, as in Prisma).
+    /// Every related row matches `filter` (true when there are none).
     #[must_use]
     pub fn every(self, filter: Filter) -> Filter {
         self.quantified(Quantifier::Every, filter)
@@ -171,13 +171,13 @@ impl Related {
         self.quantified(Quantifier::IsNot, filter)
     }
 
-    /// There is no related row (Prisma's `is: null`).
+    /// There is no related row.
     #[must_use]
     pub fn is_null(self) -> Filter {
         self.quantified(Quantifier::None, Filter::And(Vec::new()))
     }
 
-    /// There is a related row (Prisma's `isNot: null`).
+    /// There is a related row.
     #[must_use]
     pub fn is_not_null(self) -> Filter {
         self.quantified(Quantifier::Some, Filter::And(Vec::new()))

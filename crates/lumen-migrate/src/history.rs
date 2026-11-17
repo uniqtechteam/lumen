@@ -1,5 +1,5 @@
-//! The migrations folder and the `_prisma_migrations` table, in Prisma's formats so a project can
-//! move between lumen and Prisma: `migrations/<YYYYMMDDHHMMSS>_<name>/migration.sql`,
+//! The migrations folder and the `_prisma_migrations` history table:
+//! `migrations/<YYYYMMDDHHMMSS>_<name>/migration.sql`,
 //! `migrations/migration_lock.toml`, and the same table columns and checksums.
 
 use std::fmt::Write as _;
@@ -14,7 +14,8 @@ use crate::MigrateError;
 /// The file that records which database the migrations are for.
 pub const LOCK_FILE: &str = "migration_lock.toml";
 
-/// Prisma's advisory lock key, so lumen and Prisma never deploy at the same moment.
+/// The advisory lock key held while migrations are applied, so two deploys never run at the same
+/// moment.
 pub const ADVISORY_LOCK_KEY: i64 = 72_707_369;
 
 /// One migration folder.
@@ -27,7 +28,7 @@ pub struct LocalMigration {
 }
 
 impl LocalMigration {
-    /// The SHA-256 of the script, as Prisma stores it.
+    /// The SHA-256 of the script, as the history table stores it.
     #[must_use]
     pub fn checksum(&self) -> String {
         checksum(&self.script)
@@ -161,7 +162,7 @@ pub fn parse_timestamp(text: &str) -> Option<i64> {
 }
 
 /// A folder name for a new migration: the timestamp, then the name in snake case (at most 200
-/// characters, as Prisma allows).
+/// characters).
 #[must_use]
 pub fn folder_name(unix_seconds: i64, name: &str) -> String {
     let clean: String = name
@@ -211,7 +212,7 @@ const CREATE_TABLE: &str = r#"CREATE TABLE IF NOT EXISTS "_prisma_migrations" (
     "applied_steps_count"   INTEGER NOT NULL DEFAULT 0
 )"#;
 
-/// Create the history table if it is missing (same columns as Prisma's).
+/// Create the history table if it is missing.
 ///
 /// # Errors
 /// When the statement fails.
@@ -294,7 +295,7 @@ pub async fn apply(
     }
 }
 
-/// Where a project keeps its migrations: next to the schema file, like Prisma.
+/// Where a project keeps its migrations: a `migrations` folder next to the schema file.
 #[must_use]
 pub fn default_dir(schema_path: &Path) -> PathBuf {
     schema_path

@@ -72,7 +72,7 @@ impl Diagnostic {
         Self::error(span, "this comment has no closing `*/`")
     }
 
-    /// `type Id = String`: aliases were removed from Prisma.
+    /// `type Id = String`: the schema language has no type aliases.
     #[must_use]
     pub fn type_alias(span: Span, name: &str) -> Self {
         Self::error(span, format!("type aliases are not supported (`type {name} = ...`)"))

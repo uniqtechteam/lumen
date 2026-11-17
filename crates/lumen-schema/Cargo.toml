@@ -1,6 +1,6 @@
 [package]
 name = "lumen-schema"
-description = "Reads, checks and formats schema.prisma files for lumen."
+description = "Reads, checks and formats lumen schema files."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

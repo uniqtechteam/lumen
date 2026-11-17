@@ -1,5 +1,5 @@
-//! Migration steps as Postgres SQL, in the style of Prisma's migration files (a `-- Step`
-//! comment above each statement), so migrations written by either tool read the same.
+//! Migration steps as Postgres SQL, with a `-- Step` comment above each statement so a migration
+//! file reads as a list of what it does.
 
 use std::fmt::Write as _;
 

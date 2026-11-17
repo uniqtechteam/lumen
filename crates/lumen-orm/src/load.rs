@@ -1,7 +1,7 @@
 //! Loading related rows for many parents at once: one query per relation level, never one per
 //! parent. Single-column keys use `= ANY($1)` (one array parameter, so no parameter limit);
 //! composite keys use `(a, b) IN (..)` in chunks under Postgres's parameter limit. Children keep
-//! the select's order. Paging inside an include is per parent (as in Prisma) and runs in SQL with
+//! the select's order. Paging inside an include is per parent and runs in SQL with
 //! `ROW_NUMBER() OVER (PARTITION BY ..)`: the child select's `limit` and `offset` are the `take`
 //! and `skip` of each parent's children, never of all children together. Paging that SQL cannot
 //! run (a negative value, or paging a to-one relation) is a P2009 error, never ignored.

@@ -1,5 +1,5 @@
 //! MongoDB: the same filters, ordering and paging as on Postgres, rendered as BSON queries.
-//! `not` keeps documents where the field is null or missing, as in Prisma. Relation filters run as
+//! `not` keeps documents where the field is null or missing. Relation filters run as
 //! one extra statement per relation filter (see `relations`).
 
 mod relations;

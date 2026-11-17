@@ -1,5 +1,5 @@
-//! `migrate deploy`, `status`, `reset` and `dev`, the way Prisma Migrate behaves, so the two can
-//! take turns on one project.
+//! `migrate deploy`, `status`, `reset` and `dev`: write, check and apply the migrations in the
+//! migrations folder, and keep the history table up to date.
 
 use std::fmt::Write as _;
 use std::path::PathBuf;
@@ -85,7 +85,7 @@ pub async fn status(project: &Project) -> Result<Status, MigrateError> {
     Ok(compare(&local, &applied))
 }
 
-/// Apply every pending migration, in order, under Prisma's advisory lock. Never needs a shadow
+/// Apply every pending migration, in order, under the migrations advisory lock. Never needs a shadow
 /// database, so it is safe to run in production.
 ///
 /// # Errors

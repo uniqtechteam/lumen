@@ -24,7 +24,7 @@ pub enum Value {
     Json(serde_json::Value),
     /// `timestamptz`.
     DateTime(DateTime<Utc>),
-    /// `timestamp` (without time zone), Prisma's default for `DateTime`.
+    /// `timestamp` (without time zone), the default column type for `DateTime`.
     Timestamp(NaiveDateTime),
     /// `uuid`, as text (cast with `::uuid`).
     Uuid(String),

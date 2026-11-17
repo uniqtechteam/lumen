@@ -1,11 +1,8 @@
 # lumen
 
-lumen is a Prisma-style data layer for Rust. You describe your data in a `schema.prisma` file, and
-lumen writes the migrations and a type-safe client for it. Under the client sits a query builder
+lumen is a data layer for Rust built around one schema file. You describe your models once, and
+lumen writes the migrations and a type-safe client for them. Under the client sits a query builder
 for the queries a generated client cannot express. It works with Postgres and MongoDB.
-
-It reads the same `schema.prisma` files Prisma reads and keeps migrations in the same folders and
-history table. A project can switch between the two tools, in either direction.
 
 **Status:** 0.1. Tested on Postgres 16 and MongoDB 7. The Limits section lists what waits for 0.2.
 
@@ -32,7 +29,8 @@ CREATE TABLE "User" (
 CREATE UNIQUE INDEX "User_email_key" ON "User"("email");
 ```
 
-That is the SQL Prisma writes for the same model, down to the constraint names.
+The migration is plain SQL in a folder you commit. Read it, edit it before it runs, or hand it to
+someone who reviews database changes.
 
 ## Install
 
@@ -50,6 +48,40 @@ lumen init                      # prisma/schema.prisma, .env, prisma/migrations
 # point DATABASE_URL in .env at your database, add your models, then:
 lumen migrate dev --name init   # writes and applies a migration, then runs `lumen generate`
 ```
+
+The schema file holds the database, the generator and your models. `lumen init` starts it with a
+`User` model. Here it also has a `Post`, which the examples below use:
+
+```prisma
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "lumen"
+  output   = "../src/db.rs"
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  name      String?
+  createdAt DateTime @default(now())
+  posts     Post[]
+}
+
+model Post {
+  id       Int     @id @default(autoincrement())
+  title    String
+  author   User    @relation(fields: [authorId], references: [id])
+  authorId Int
+}
+```
+
+Each `model` becomes a table (a collection on MongoDB). `?` makes a field optional, `[]` makes it
+a list, and `@relation` says which field holds the foreign key. `lumen format` lines the file up,
+and `lumen validate` explains what is wrong with it, with a "did you mean" hint for typos.
 
 For MongoDB, start with `lumen init --provider mongodb` and run `lumen db push` instead of
 `migrate dev`.
@@ -89,7 +121,7 @@ On MongoDB the client is made from a URL that names the database:
 `Client::new(lumen_orm::mongo::MongoDb::connect_url(&url).await?)`, or
 `Client::connect(&url, "app")` to name the database apart from the URL.
 
-Errors carry Prisma's codes. For example, `err.code == "P2002"` is a duplicate, and on Postgres
+Errors carry stable codes. For example, `err.code == "P2002"` is a duplicate, and on Postgres
 `err.fields` names the columns. On MongoDB `err.fields` is empty in 0.1; the message names the
 index. `err.http_status()` gives the status a web API should answer with.
 
@@ -114,10 +146,19 @@ let users = client
 
 To-many relations have `some`, `every` and `none`. To-one relations have `is` and `is_not`, plus
 `is_null` and `is_not_null` when the relation is optional. They nest, so
-`user::posts::some(post::tags::some(tag::name::equals("rust")))` works too. They mean what they
-mean in Prisma: `every` is true for a user with no posts. Text fields also have `starts_with`,
-`ends_with` and `contains`, each with an `_insensitive` version. The full list is in
-[docs/prisma-users.md](docs/prisma-users.md).
+`user::posts::some(post::tags::some(tag::name::equals("rust")))` works too. Note that `every` is
+true for a user with no posts, and `is_not` matches a post with no author.
+
+| Field filter | Matches |
+| --- | --- |
+| `equals(v)`, `not(v)` | the value, or anything else (`not` also matches NULL) |
+| `is_in([..])`, `not_in([..])` | one of the values, or none of them |
+| `lt`, `lte`, `gt`, `gte` | comparisons on numbers and dates |
+| `contains`, `starts_with`, `ends_with` | text, each with an `_insensitive` version |
+| `is_null()`, `is_not_null()` | optional fields |
+
+Combine conditions with `a.and(b)`, `a.or(b)` and `!a`. Each filter only takes values of its
+field's type, so passing text to an `Int` field does not compile.
 
 ## How it works
 
@@ -130,7 +171,7 @@ flowchart LR
     D --> F
     F --> K[check<br/>counts rows first]
     K --> M[migrations/..._name/<br/>migration.sql]
-    M --> H[_prisma_migrations]
+    M --> H[(history table)]
     P --> G[lumen-db-codegen]
     G --> R[src/db.rs]
     R --> O[lumen-orm<br/>queries, includes, transactions]
@@ -230,7 +271,7 @@ its error rolls back the whole thing.
 
 | | Postgres | MongoDB |
 | --- | --- | --- |
-| Schema: parse, check with "did you mean" hints, `format` like `prisma format` | yes | yes |
+| Schema: parse, check with "did you mean" hints, `format` | yes | yes |
 | `migrate dev / deploy / status / reset / diff / resolve` | yes | (uses `db push`) |
 | `db push` | tables, columns, indexes, foreign keys, enums | collections and indexes |
 | `db pull` | 0.2 | by sampling documents |
@@ -239,20 +280,8 @@ its error rolls back the whole thing.
 | Includes, one statement per level | yes | yes (`$in`) |
 | Nested writes: create with nested `create` and `connect` | yes | yes |
 | Transactions | yes, with isolation levels | yes, on a replica set |
-| Errors with Prisma codes (P2002, P2003, P2025, ...) | yes | yes |
+| Errors with stable codes (P2002, P2003, P2025, ...) | yes | yes |
 | Query builder for dynamic queries | yes | yes |
-
-## Working with Prisma
-
-- Migrations use Prisma's layout (`YYYYMMDDHHMMSS_name/migration.sql`, `migration_lock.toml`) and
-  its `_prisma_migrations` table, checksums and advisory lock.
-- CI checks this against the real Prisma 6.19.3 CLI in both directions. A Prisma project carries on
-  with `lumen migrate dev`, and a lumen project carries on with `prisma migrate dev`. Neither sees
-  drift.
-- `lumen generate` uses the generator whose provider is `lumen`. Other generator blocks, such as
-  `prisma-client-js`, are left alone.
-
-See [docs/prisma-users.md](docs/prisma-users.md) for what maps to what.
 
 ## Configuration
 
@@ -262,6 +291,11 @@ See [docs/prisma-users.md](docs/prisma-users.md) for what maps to what.
 - `shadowDatabaseUrl` is optional. Without it, `migrate dev` creates a temporary database and drops
   it afterwards.
 - The client goes where the generator's `output` says (relative to the schema), or to `src/db.rs`.
+  `lumen generate` uses the generator block whose provider is `lumen` and leaves other generator
+  blocks alone.
+- Migrations live in a `migrations` folder next to the schema, one folder per migration
+  (`YYYYMMDDHHMMSS_name/migration.sql`) plus `migration_lock.toml`. The database keeps a history
+  table of what was applied, with a checksum of each file, so an edited migration is noticed.
 
 ## In CI
 
@@ -289,27 +323,24 @@ Without a terminal, a command that would lose data stops and asks you to pass
   - `db pull` for Postgres
   - the `time` crate as an option instead of `chrono`
   - a test matrix over Postgres 13 to 17, plus database tests on macOS and Windows
-  - checking the parser and formatter against Prisma's example schemas and real open-source
-    projects. In 0.1 they are only checked against the schemas in lumen's own tests.
+  - checking the parser and formatter against large real-world schemas. In 0.1 they are only
+    checked against the schemas in lumen's own tests.
 - Nested writes in 0.1 are `create` and `connect` inside a create, on one-to-one and one-to-many
   relations with a single-column key. `connect_or_create`, `disconnect`, `set` and nested writes
   inside `update` come later.
-- MongoDB has no migrations, as in Prisma. `db push` creates collections and indexes, rebuilds
+- MongoDB has no migration files. `db push` creates collections and indexes, rebuilds
   an index whose definition in the schema changed, and never drops a collection. Indexes the
   schema does not have (an `@@index` you removed, or one made by hand) are listed and left in
   place; drop them yourself when they are no longer needed.
+
+## Guides
+
+- Coming from Prisma? See [docs/for-prisma-users.md](docs/for-prisma-users.md).
 
 ## Contributing
 
 Bug reports with a schema that shows the problem are the most useful. The tests run without
 databases. Set `LUMEN_TEST_POSTGRES_URL` and `LUMEN_TEST_MONGO_URL` (a replica set) to run the rest.
-`LUMEN_TEST_PRISMA=1` also checks interop with the Prisma CLI.
-
-## Credits
-
-lumen's design learns from [Prisma](https://github.com/prisma/prisma-engines) (Apache-2.0) and
-[SeaORM](https://github.com/SeaQL/sea-orm) (MIT OR Apache-2.0). It is written from scratch and is not
-affiliated with or endorsed by Prisma.
 
 ## Licence
 
