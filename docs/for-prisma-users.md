@@ -302,7 +302,7 @@ and its filters match on that list.
 | `String` | `String` (`Uuid` with `@db.Uuid`) | `String` (`ObjectId` with `@db.ObjectId`) |
 | `Int`, `BigInt`, `Float` | `i32`, `i64`, `f64` | the same |
 | `Decimal` | `rust_decimal::Decimal` | `Decimal128` |
-| `DateTime` | `chrono::NaiveDateTime` (`DateTime<Utc>` with `@db.Timestamptz`) | BSON `DateTime` |
+| `DateTime` | `time::PrimitiveDateTime` (`OffsetDateTime` with `@db.Timestamptz`, `Date` with `@db.Date`, `Time` with `@db.Time`); with `dateTimeType = "chrono"`, `chrono::NaiveDateTime` (`DateTime<Utc>`, `NaiveDate`, `NaiveTime`) | BSON `DateTime` |
 | `Json` | `serde_json::Value` | the same |
 | `Bytes` | `Vec<u8>` | BSON `Binary` |
 | `Type?` | `Option<Type>` | the same |

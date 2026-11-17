@@ -125,6 +125,28 @@ Errors carry stable codes. For example, `err.code == "P2002"` is a duplicate, an
 names the schema fields of the unique constraint (or MongoDB index) it broke, `["email"]` or
 `["lang", "title"]`. `err.http_status()` gives the status a web API should answer with.
 
+### Dates
+
+A `DateTime` field is a `time` type by default: `time::PrimitiveDateTime` for the plain
+`timestamp(3)` column (a UTC time, as Prisma stores it), `time::OffsetDateTime` with
+`@db.Timestamptz`, `time::Date` with `@db.Date` and `time::Time` with `@db.Time`. lumen-orm
+re-exports the crate as `lumen_orm::time`, and the generated types write ISO 8601 text in JSON.
+
+To keep `chrono` types, turn on lumen-orm's `chrono` feature and ask the generator for them:
+
+```prisma
+generator client {
+  provider     = "lumen"
+  dateTimeType = "chrono" // NaiveDateTime, DateTime<Utc>, NaiveDate, NaiveTime
+}
+```
+
+```toml
+lumen-orm = { version = "0.2", default-features = false, features = ["chrono"] }
+```
+
+On MongoDB dates are BSON `DateTime` either way.
+
 ## Filters
 
 Every field has a module of typed conditions, and every relation field has one too. Here are the
@@ -346,7 +368,6 @@ Without a terminal, a command that would lose data stops and asks you to pass
   - many-to-many and nested includes in the generated client (the query builder already has them)
   - `generate --watch`
   - `db pull` for Postgres
-  - the `time` crate as an option instead of `chrono`
 - On MongoDB a relation filter sends the keys of every related document that matches to the
   outer query as one `$in` list. A condition that matches hundreds of thousands of related
   documents makes a large query, and at around 800,000 ObjectIds it reaches MongoDB's 16 MB
