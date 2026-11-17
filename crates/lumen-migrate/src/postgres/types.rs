@@ -87,6 +87,89 @@ pub fn string_literal(s: &str) -> String {
     format!("'{}'", s.replace('\'', "''"))
 }
 
+/// A list default as a Postgres array literal, the way `array_out` prints it: `'{}'`,
+/// `'{a,"b c"}'`, `'{1,-2}'`. The literal needs no cast, so it fits `text[]`, `integer[]` and enum
+/// arrays alike, and Postgres keeps it as written, so the database reads back the same text.
+#[must_use]
+pub fn array_literal(items: &[String]) -> String {
+    let elements: Vec<String> = items
+        .iter()
+        .map(|item| {
+            let plain = !item.is_empty()
+                && !item.eq_ignore_ascii_case("null")
+                && !item.chars().any(|c| {
+                    matches!(c, '{' | '}' | ',' | '"' | '\\')
+                        || c.is_ascii_whitespace()
+                        || c == '\x0b'
+                });
+            if plain {
+                item.clone()
+            } else {
+                format!("\"{}\"", item.replace('\\', "\\\\").replace('"', "\\\""))
+            }
+        })
+        .collect();
+    string_literal(&format!("{{{}}}", elements.join(",")))
+}
+
+/// `ARRAY['a'::text, '-2'::integer, (1)::bigint, true]` or `ARRAY[]::text[]`, as `pg_get_expr`
+/// prints a list default written as `ARRAY[..]` (Prisma writes them so), in the canonical
+/// [`array_literal`] form. `None` for anything else.
+fn array_constructor(expr: &str) -> Option<String> {
+    let body = expr.strip_prefix("ARRAY[")?;
+    let mut in_quote = false;
+    let mut depth = 0usize;
+    let mut start = 0;
+    let mut parts = Vec::new();
+    let mut end = None;
+    for (i, c) in body.char_indices() {
+        match c {
+            '\'' => in_quote = !in_quote,
+            _ if in_quote => {}
+            '(' | '[' => depth += 1,
+            ')' | ']' if depth > 0 => depth -= 1,
+            ',' if depth == 0 => {
+                parts.push(&body[start..i]);
+                start = i + 1;
+            }
+            ']' => {
+                parts.push(&body[start..i]);
+                end = Some(i);
+                break;
+            }
+            _ => {}
+        }
+    }
+    let rest = body[end? + 1..].trim();
+    if !(rest.is_empty() || rest.starts_with("::")) {
+        return None;
+    }
+    let mut items = Vec::new();
+    for part in parts {
+        let part = part.trim();
+        if part.is_empty() {
+            continue;
+        }
+        let bare = strip_casts(part);
+        let bare = bare
+            .strip_prefix('(')
+            .and_then(|b| b.strip_suffix(')'))
+            .map_or(bare, strip_casts);
+        let item = if let Some(inner) = bare.strip_prefix('\'').and_then(|b| b.strip_suffix('\'')) {
+            inner.replace("''", "'")
+        } else {
+            match bare {
+                "true" => "t".to_owned(),
+                "false" => "f".to_owned(),
+                n if n.parse::<f64>().is_ok() => n.to_owned(),
+                _ => return None,
+            }
+        };
+        items.push(item);
+    }
+    Some(array_literal(&items))
+}
+
 /// Remove trailing `::type` casts that are outside quotes: `'a'::text` → `'a'`.
 fn strip_casts(expr: &str) -> &str {
     let mut out = expr.trim();
@@ -113,6 +196,28 @@ fn strip_casts(expr: &str) -> &str {
     }
 }
 
+/// `'-2'` in `'-2'::integer`: a quoted number cast to a numeric type, without its quotes.
+fn quoted_number<'a>(expr: &str, bare: &'a str) -> Option<&'a str> {
+    let inner = bare.strip_prefix('\'')?.strip_suffix('\'')?;
+    inner.parse::<f64>().ok()?;
+    let cast = expr
+        .trim()
+        .strip_prefix(bare)?
+        .trim_start()
+        .strip_prefix("::")?;
+    [
+        "integer",
+        "bigint",
+        "smallint",
+        "numeric",
+        "double precision",
+        "real",
+    ]
+    .iter()
+    .any(|t| cast.starts_with(t))
+    .then_some(inner)
+}
+
 /// A default expression as `pg_get_expr` prints it, normalised.
 #[must_use]
 pub fn normalise_default(expr: &str) -> Default {
@@ -124,11 +229,18 @@ pub fn normalise_default(expr: &str) -> Default {
     if lower == "current_timestamp" || lower == "now()" || lower.starts_with("current_timestamp(") {
         return Default::Now;
     }
+    if let Some(literal) = array_constructor(e) {
+        return Default::Literal(literal);
+    }
     let bare = strip_casts(e);
     let bare = bare
         .strip_prefix('(')
         .and_then(|b| b.strip_suffix(')'))
         .map_or(bare, strip_casts);
+    // Postgres prints a negative number as a quoted string with a numeric cast: `'-2'::integer`
+    if let Some(number) = quoted_number(e, bare) {
+        return Default::Literal(number.to_owned());
+    }
     let is_literal =
         bare.starts_with('\'') || bare == "true" || bare == "false" || bare.parse::<f64>().is_ok();
     if is_literal {
@@ -140,7 +252,7 @@ pub fn normalise_default(expr: &str) -> Default {
 
 #[cfg(test)]
 mod tests {
-    use super::{column_type, normalise_default, type_name};
+    use super::{array_literal, column_type, normalise_default, type_name};
     use crate::shape::Default;
     use lumen_schema::checked::{NativeType, ScalarType};
 
@@ -188,7 +300,7 @@ mod tests {
         assert_eq!(normalise_default("false"), Default::Literal("false".into()));
         assert_eq!(
             normalise_default("'0'::bigint"),
-            Default::Literal("'0'".into())
+            Default::Literal("0".into())
         );
         assert_eq!(
             normalise_default("(0)::bigint"),
@@ -197,6 +309,52 @@ mod tests {
         assert_eq!(
             normalise_default("gen_random_uuid()"),
             Default::Expression("gen_random_uuid()".into())
+        );
+    }
+
+    #[test]
+    fn list_defaults_read_back_as_array_literals() {
+        let lit = |s: &str| Default::Literal(s.to_owned());
+        // as Postgres 13 to 17 print defaults written as `ARRAY[..]` (Prisma's form)
+        for (printed, canonical) in [
+            ("ARRAY[]::text[]", "'{}'"),
+            ("ARRAY[]::\"Role\"[]", "'{}'"),
+            ("ARRAY['x'::text, 'y it''s'::text]", "'{x,\"y it''s\"}'"),
+            ("ARRAY[1, '-2'::integer]", "'{1,-2}'"),
+            ("ARRAY['A'::\"Role\", 'B'::\"Role\"]", "'{A,B}'"),
+            ("ARRAY[true]", "'{t}'"),
+            ("ARRAY[(1)::bigint, (2)::bigint]", "'{1,2}'"),
+            // and written as an array literal (lumen's form)
+            ("'{}'::text[]", "'{}'"),
+            ("'{x,\"y it''s\"}'::text[]", "'{x,\"y it''s\"}'"),
+        ] {
+            assert_eq!(normalise_default(printed), lit(canonical), "{printed}");
+        }
+        assert_eq!(
+            normalise_default("ARRAY[lower('A'::text)]"),
+            Default::Expression("ARRAY[lower('A'::text)]".into())
+        );
+    }
+
+    #[test]
+    fn array_literals_quote_like_postgres() {
+        let s = |v: &[&str]| v.iter().map(|x| (*x).to_owned()).collect::<Vec<_>>();
+        assert_eq!(array_literal(&[]), "'{}'");
+        assert_eq!(
+            array_literal(&s(&["openid", "profile"])),
+            "'{openid,profile}'"
+        );
+        assert_eq!(
+            array_literal(&s(&[
+                "a b",
+                "",
+                "NULL",
+                "x,y",
+                "q\"",
+                "back\\slash",
+                "it's"
+            ])),
+            "'{\"a b\",\"\",\"NULL\",\"x,y\",\"q\\\"\",\"back\\\\slash\",it''s}'"
         );
     }
 }
