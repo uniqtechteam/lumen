@@ -117,19 +117,26 @@ impl Parser<'_> {
     }
 
     /// The end of an item's line: an optional trailing comment, then a line break, `}` or the end.
-    fn end_of_line(&mut self, kind: &str) -> LineResult<Option<String>> {
-        let trailing = if let T::Comment(text) = self.kind().clone() {
-            self.bump();
-            Some(text)
-        } else {
-            None
-        };
+    /// A trailing `//` comment is kept as `trailing`; a trailing `///` one is documentation and
+    /// is added to `comments.doc`, after the `///` lines above the item.
+    fn end_of_line(&mut self, kind: &str, mut comments: Comments) -> LineResult<Comments> {
+        match self.kind().clone() {
+            T::Comment(text) => {
+                self.bump();
+                comments.trailing = Some(text);
+            }
+            T::DocComment(text) => {
+                self.bump();
+                comments.doc.push(text);
+            }
+            _ => {}
+        }
         match self.kind() {
             T::Newline => {
                 self.bump();
-                Ok(trailing)
+                Ok(comments)
             }
-            T::RBrace | T::Eof => Ok(trailing),
+            T::RBrace | T::Eof => Ok(comments),
             _ => {
                 let span = self.peek().span;
                 Err(self.error(Diagnostic::invalid_line(span, kind)))
@@ -351,7 +358,7 @@ impl Parser<'_> {
         } else {
             if !matches!(
                 self.kind(),
-                T::At | T::Newline | T::RBrace | T::Eof | T::Comment(_)
+                T::At | T::Newline | T::RBrace | T::Eof | T::Comment(_) | T::DocComment(_)
             ) {
                 return Err(self.expected("a type"));
             }
@@ -361,15 +368,12 @@ impl Parser<'_> {
         };
         let attributes = self.field_attributes()?;
         let span = name.span.to(self.prev_span());
-        let trailing = self.end_of_line("model")?;
+        let comments = self.end_of_line("model", comments)?;
         Ok(Field {
             name,
             ty,
             attributes,
-            comments: Comments {
-                trailing,
-                ..comments
-            },
+            comments,
             span,
         })
     }
@@ -402,7 +406,7 @@ impl Parser<'_> {
                 T::AtAt => match self.attribute() {
                     Ok(attribute) => {
                         attributes.push(attribute);
-                        if self.end_of_line(kind).is_err() {
+                        if self.end_of_line(kind, Comments::default()).is_err() {
                             self.skip_line();
                         }
                     }
@@ -456,11 +460,11 @@ impl Parser<'_> {
             };
             let attributes = p.field_attributes()?;
             let span = value.span.to(p.prev_span());
-            let trailing = p.end_of_line("enum")?;
+            let comments = p.end_of_line("enum", c)?;
             Ok(Some(EnumValue {
                 name: value,
                 attributes,
-                comments: Comments { trailing, ..c },
+                comments,
                 span,
             }))
         })?;
@@ -489,11 +493,11 @@ impl Parser<'_> {
             p.bump();
             let value = p.expr()?;
             let span = key.span.to(value.span());
-            let trailing = p.end_of_line(label)?;
+            let comments = p.end_of_line(label, c)?;
             Ok(Some(Property {
                 name: key,
                 value: Some(value),
-                comments: Comments { trailing, ..c },
+                comments,
                 span,
             }))
         })?;

@@ -180,3 +180,22 @@ fn an_unclosed_block_names_the_block() {
         "the model `User` is never closed"
     );
 }
+
+#[test]
+fn a_trailing_doc_comment_documents_the_field() {
+    let ast = parse_ok(
+        "schema.prisma",
+        "model User {\n  /// Shown on posts.\n  name  String? /// Optional.\n  email String // not a doc\n}\n",
+    );
+    let user = model(&ast, "User");
+    assert_eq!(
+        user.fields[0].comments.doc,
+        ["Shown on posts.", "Optional."]
+    );
+    assert_eq!(user.fields[0].comments.trailing, None);
+    assert_eq!(user.fields[1].comments.doc, Vec::<String>::new());
+    assert_eq!(
+        user.fields[1].comments.trailing.as_deref(),
+        Some("not a doc")
+    );
+}

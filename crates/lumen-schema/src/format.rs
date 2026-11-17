@@ -123,7 +123,7 @@ impl Formatter<'_> {
 
     fn split_trailing(&self, tokens: &[Token]) -> (Vec<Token>, Option<String>) {
         match tokens.last() {
-            Some(t) if matches!(t.kind, T::Comment(_)) => (
+            Some(t) if matches!(t.kind, T::Comment(_) | T::DocComment(_)) => (
                 tokens[..tokens.len() - 1].to_vec(),
                 Some(self.raw(t).to_owned()),
             ),
