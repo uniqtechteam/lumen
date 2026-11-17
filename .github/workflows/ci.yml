@@ -114,6 +114,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          # The action adds --all-features by default; check the default feature graph instead, as
+          # deny.toml says (the opt-in chrono feature pulls in an unmaintained crate).
+          arguments: --workspace
 
   # Dates are `time` types by default; `chrono` is an opt-in feature of lumen-orm. This job builds
   # and tests the `chrono` side (alone and together with `time`) against Postgres and MongoDB.
