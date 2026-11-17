@@ -51,8 +51,12 @@ lumen init                      # prisma/schema.prisma, .env, prisma/migrations
 lumen migrate dev --name init   # writes and applies a migration, then runs `lumen generate`
 ```
 
-Add `lumen-orm` to your crate and include the generated file. With MongoDB, turn on the `mongodb`
-feature and run `lumen db push` instead of `migrate dev`.
+For MongoDB, start with `lumen init --provider mongodb` and run `lumen db push` instead of
+`migrate dev`.
+
+Add `lumen-orm` to your crate (with the `mongodb` feature for MongoDB) and include the generated
+file. The generated client does not read `.env` (the `lumen` command does), so export
+`DATABASE_URL` or load `.env` first, for example with `dotenvy::dotenv()`.
 
 ```rust
 #[rustfmt::skip]
@@ -81,8 +85,13 @@ let result = client
     .await; // both rows, or neither
 ```
 
-Errors carry Prisma's codes. For example, `err.code == "P2002"` is a duplicate, and `err.fields`
-names the columns. `err.http_status()` gives the status a web API should answer with.
+On MongoDB the client is made from a URL that names the database:
+`Client::new(lumen_orm::mongo::MongoDb::connect_url(&url).await?)`, or
+`Client::connect(&url, "app")` to name the database apart from the URL.
+
+Errors carry Prisma's codes. For example, `err.code == "P2002"` is a duplicate, and on Postgres
+`err.fields` names the columns. On MongoDB `err.fields` is empty in 0.1; the message names the
+index. `err.http_status()` gives the status a web API should answer with.
 
 ## Filters
 
