@@ -4,7 +4,7 @@ lumen is a data layer for Rust built around one schema file. You describe your m
 lumen writes the migrations and a type-safe client for them. Under the client sits a query builder
 for the queries a generated client cannot express. It works with Postgres and MongoDB.
 
-**Status:** 0.1. Tested on Postgres 16 and MongoDB 7. The Limits section lists what waits for 0.2.
+**Status:** 0.1. Tested on Postgres 13 to 17 and MongoDB 7. The Limits section lists what waits for 0.2.
 
 ```console
 $ lumen init
@@ -336,8 +336,9 @@ Without a terminal, a command that would lose data stops and asks you to pass
 ## Limits
 
 - No SQLite, MySQL or SQL Server. Postgres and MongoDB only.
-- 0.1 is tested on Postgres 16 and MongoDB 7 on Linux. Release binaries are built for Linux, macOS
-  and Windows, but the database tests only run on Linux for now.
+- CI runs every database test on Linux against Postgres 13, 14, 15, 16 and 17 and MongoDB 7, and
+  the Postgres tests on macOS and Windows against Postgres 17. The MongoDB tests run on Linux
+  only: they need a replica set in Docker, which the macOS and Windows runners do not have.
 - Planned for 0.2, not in 0.1:
   - aggregates and `groupBy`
   - cursor pagination, and ordering by the number of related rows
@@ -346,9 +347,6 @@ Without a terminal, a command that would lose data stops and asks you to pass
   - `generate --watch`
   - `db pull` for Postgres
   - the `time` crate as an option instead of `chrono`
-  - a test matrix over Postgres 13 to 17, plus database tests on macOS and Windows
-  - checking the parser and formatter against large real-world schemas. In 0.1 they are only
-    checked against the schemas in lumen's own tests.
 - On MongoDB a relation filter sends the keys of every related document that matches to the
   outer query as one `$in` list. A condition that matches hundreds of thousands of related
   documents makes a large query, and at around 800,000 ObjectIds it reaches MongoDB's 16 MB
@@ -369,6 +367,11 @@ Without a terminal, a command that would lose data stops and asks you to pass
 
 Bug reports with a schema that shows the problem are the most useful. The tests run without
 databases. Set `LUMEN_TEST_POSTGRES_URL` and `LUMEN_TEST_MONGO_URL` (a replica set) to run the rest.
+
+The parser, the checker, the formatter and the migration engine are also tested against 68 real
+schema files, up to 3,900 lines long, from open-source projects and example apps. They live in
+[crates/lumen-schema/tests/corpus](crates/lumen-schema/tests/corpus), with their sources and
+licences. A schema that lumen reads wrong is a good addition there.
 
 ## Licence
 

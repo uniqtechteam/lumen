@@ -54,6 +54,13 @@ those tests yourself, set `LUMEN_TEST_PRISMA=1` next to `LUMEN_TEST_POSTGRES_URL
 3. Run `lumen generate` and include the client in your crate (see the README's quick start).
 4. From now on, `lumen migrate dev --name ..` writes the next migration into the same folder.
 
+lumen calculates the database the way Prisma does, down to list columns being nullable, the
+63-byte constraint names and the tables of `@@ignore` models. Its tests build databases from
+Prisma 6.19's own SQL for ten real schemas (Prisma's examples and open-source projects such as
+langfuse, trigger.dev and amplication) and check that lumen finds nothing to change. Projects
+upgraded from lumen 0.1.1 get one migration that drops `NOT NULL` from list columns, which
+0.1.1 added and Prisma does not.
+
 ## Going back, or using both
 
 Nothing in the migrations folder or the database is lumen specific, so `prisma migrate dev` and
