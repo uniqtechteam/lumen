@@ -1,8 +1,10 @@
 //! SPEC-MONGO-001 AC-001: the query layer on a real MongoDB gives the same answers as on Postgres
-//! (the same 37 filter cases, relation filters included, and data as `tests/postgres.rs`). Runs
-//! when `LUMEN_TEST_MONGO_URL` is set.
+//! (the 48 filter cases in `common`, relation filters and many-to-many included, on the same data as
+//! `tests/postgres.rs`). Runs when `LUMEN_TEST_MONGO_URL` is set.
 
 #![allow(clippy::unwrap_used, reason = "tests: a failure should stop the test")]
+
+mod common;
 
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -105,87 +107,16 @@ async fn ids(db: &MongoDb, filter: Filter) -> Vec<i32> {
         .collect()
 }
 
-/// The relation-filter cases, the same on Postgres and MongoDB. Items have parts (`Part.itemId`)
-/// and an optional parent item (`Item.parentId`): Lamp has a bulb and a cable, the lamp shade has a
-/// bulb and Lamp as parent, Desk has nothing, Chair has a leg and Desk as parent.
-fn relation_cases() -> Vec<(&'static str, Filter, Vec<i32>)> {
-    let parts = || Related::new(Table::new("Part"), &[("itemId", "id")]);
-    let parent = || Related::new(Table::new("Item"), &[("id", "parentId")]);
-    let item = || Related::new(Table::new("Item"), &[("id", "itemId")]);
-    vec![
-        (
-            "starts with, ignoring case",
-            col("name").starts_with_insensitive("LAMP"),
-            vec![1, 2],
-        ),
-        (
-            "ends with, ignoring case",
-            col("name").ends_with_insensitive("SHADE"),
-            vec![2],
-        ),
-        ("some", parts().some(col("name").equals("bulb")), vec![1, 2]),
-        (
-            "some with no condition: has any",
-            parts().some(Filter::And(vec![])),
-            vec![1, 2, 4],
-        ),
-        (
-            "every is true for an item without parts",
-            parts().every(col("name").equals("bulb")),
-            vec![2, 3],
-        ),
-        (
-            "every, ignoring case",
-            parts().every(col("name").starts_with_insensitive("B")),
-            vec![2, 3],
-        ),
-        ("none", parts().none(col("name").equals("bulb")), vec![3, 4]),
-        (
-            "is on an optional to-one",
-            parent().is(col("name").equals("Lamp")),
-            vec![2],
-        ),
-        (
-            "is not keeps items without a parent",
-            parent().is_not(col("name").equals("Lamp")),
-            vec![1, 3, 4],
-        ),
-        ("is null", parent().is_null(), vec![1, 3]),
-        ("is not null", parent().is_not_null(), vec![2, 4]),
-        (
-            "nested: a part whose item's parent is Desk",
-            parts().some(item().is(parent().is(col("name").equals("Desk")))),
-            vec![4],
-        ),
-        (
-            "inside not",
-            !parts().some(col("name").equals("bulb")),
-            vec![3, 4],
-        ),
-        (
-            "inside or and and",
-            parent()
-                .is_null()
-                .and(parts().some(Filter::And(vec![])))
-                .or(col("id").equals(4)),
-            vec![1, 4],
-        ),
-    ]
-}
-
-/// Parts and parents for [`relation_cases`]. Items without a parent have no `parentId` field.
+/// Parts, parents and tags for the shared cases (`common`). Items without a parent have no
+/// `parentId` field. Tags are kept as id lists on both sides (`Item.tagIds`, `Tag.itemIds`), as a
+/// many-to-many relation is on MongoDB; Chair has no `tagIds` field and "unused" an empty list.
 async fn seed_relations(db: &MongoDb) {
-    let parts: Vec<_> = [
-        (1, 1, "bulb"),
-        (2, 1, "cable"),
-        (3, 2, "bulb"),
-        (4, 4, "leg"),
-    ]
-    .iter()
-    .map(|(id, item, n)| doc! { "id": id, "itemId": item, "name": n })
-    .collect();
+    let parts: Vec<_> = common::PARTS
+        .iter()
+        .map(|(id, item, n)| doc! { "id": id, "itemId": item, "name": n })
+        .collect();
     db.insert_many("Part", &parts).await.unwrap();
-    for (child, parent) in [(2, 1), (4, 3)] {
+    for (child, parent) in common::PARENTS {
         db.update_many(
             "Item",
             Some(&col("id").equals(child)),
@@ -194,6 +125,29 @@ async fn seed_relations(db: &MongoDb) {
         .await
         .unwrap();
     }
+    let tags: Vec<_> = common::TAGS
+        .iter()
+        .map(|(id, n)| doc! { "id": id, "name": n, "itemIds": common::items_of(*id) })
+        .collect();
+    db.insert_many("Tag", &tags).await.unwrap();
+    for item in 1..=3 {
+        db.database()
+            .collection::<mongodb::bson::Document>("Item")
+            .update_one(
+                doc! { "id": item },
+                doc! { "$set": { "tagIds": common::tags_of(item) } },
+            )
+            .await
+            .unwrap();
+    }
+}
+
+fn tags() -> Related {
+    Related::id_list(Table::new("Tag"), "tagIds", "id")
+}
+
+fn items() -> Related {
+    Related::id_list(Table::new("Item"), "itemIds", "id")
 }
 
 #[tokio::test]
@@ -203,69 +157,13 @@ async fn ac_001_every_filter_returns_the_same_rows_as_on_postgres() {
         return;
     };
     seed_relations(&db).await;
-    let dec = |s: &str| Value::Decimal(s.to_owned());
-    let cases: Vec<(&str, Filter, Vec<i32>)> = vec![
-        ("equals", col("name").equals("Lamp"), vec![1]),
-        (
-            "equals, ignoring case",
-            col("name").equals_insensitive("lamp"),
-            vec![1],
-        ),
-        (
-            "not equals keeps NULLs, like Prisma's `not`",
-            col("note").not_equals("warm light"),
-            vec![2, 3, 4],
-        ),
-        ("in", col("id").is_in([1, 3]), vec![1, 3]),
-        ("not in", col("id").not_in([1, 3]), vec![2, 4]),
-        (
-            "in an empty list matches nothing",
-            col("id").is_in(Vec::<i32>::new()),
-            vec![],
-        ),
-        ("lt on decimals", col("price").lt(dec("12.50")), vec![2]),
-        ("lte", col("price").lte(dec("12.50")), vec![1, 2]),
-        ("gt", col("price").gt(dec("80")), vec![3]),
-        ("gte", col("price").gte(dec("80")), vec![3, 4]),
-        ("contains", col("name").contains("amp"), vec![1, 2]),
-        (
-            "contains, ignoring case",
-            col("note").contains_insensitive("warm"),
-            vec![1, 4],
-        ),
-        (
-            "contains escapes % and _ (and regex characters)",
-            col("note").contains("0%_o"),
-            vec![3],
-        ),
-        ("starts with", col("name").starts_with("lamp"), vec![2]),
-        ("ends with", col("name").ends_with("k"), vec![3]),
-        ("is null", col("note").is_null(), vec![2]),
-        ("is not null", col("note").is_not_null(), vec![1, 3, 4]),
-        (
-            "enum values are strings",
-            col("role").equals("WRITER"),
-            vec![2, 4],
-        ),
-        (
-            "and",
-            col("role").equals("WRITER").and(col("note").is_null()),
-            vec![2],
-        ),
-        (
-            "or",
-            col("id").equals(1).or(col("id").equals(4)),
-            vec![1, 4],
-        ),
-        ("not", !col("id").lt(3), vec![3, 4]),
-        (
-            "an empty and is true",
-            Filter::And(vec![]),
-            vec![1, 2, 3, 4],
-        ),
-        ("an empty or is false", Filter::Or(vec![]), vec![]),
-    ];
-    for (what, filter, want) in cases.into_iter().chain(relation_cases()) {
+    let cases: Vec<_> = common::field_cases(|r| Value::Text(r.to_owned()))
+        .into_iter()
+        .chain(common::relation_cases())
+        .chain(common::many_to_many_cases(&tags, &items))
+        .collect();
+    assert_eq!(cases.len(), 48);
+    for (what, filter, want) in cases {
         assert_eq!(ids(&db, filter).await, want, "{what}");
     }
     db.database().drop().await.unwrap();
@@ -385,7 +283,59 @@ async fn ac_fr_002_relation_filters_in_counts_writes_and_transactions() {
             .await
             .unwrap_err()
             .code,
-        "P2026"
+        "P2026",
+        "MongoDB has no join tables"
     );
+    db.database().drop().await.unwrap();
+}
+
+#[tokio::test]
+async fn many_to_many_filters_skip_dangling_ids_and_run_in_transactions() {
+    let Some(db) = setup().await else { return };
+    seed_relations(&db).await;
+    let items_coll = db.database().collection::<mongodb::bson::Document>("Item");
+    // Desk keeps wood and gains an id no tag has; Chair only has one
+    items_coll
+        .update_one(doc! { "id": 3 }, doc! { "$push": { "tagIds": 99 } })
+        .await
+        .unwrap();
+    items_coll
+        .update_one(doc! { "id": 4 }, doc! { "$set": { "tagIds": [99] } })
+        .await
+        .unwrap();
+    let any = || Filter::And(vec![]);
+    assert_eq!(ids(&db, tags().some(any())).await, [1, 2, 3]);
+    assert_eq!(ids(&db, tags().none(any())).await, [4]);
+    assert_eq!(
+        ids(&db, tags().every(col("name").equals("wood"))).await,
+        [3, 4]
+    );
+
+    let light = || tags().some(col("name").equals("light"));
+    let before = db.statements();
+    assert_eq!(db.count("Item", Some(&light())).await.unwrap(), 2);
+    assert_eq!(
+        db.statements() - before,
+        2,
+        "one statement for the relation, one for the count"
+    );
+    let in_tx = db
+        .transaction(async |tx| {
+            let lit = lumen_orm::mongo::MongoRun::update_many(
+                tx,
+                "Item",
+                Some(&light()),
+                vec![("note".into(), "lit".into())],
+            )
+            .await?;
+            let gone =
+                lumen_orm::mongo::MongoRun::delete_many(tx, "Tag", Some(&items().none(any())))
+                    .await?;
+            Ok((lit, gone))
+        })
+        .await
+        .unwrap();
+    assert_eq!(in_tx, (2, 1), "two lit items, the unused tag deleted");
+    assert_eq!(ids(&db, col("note").equals("lit")).await, [1, 2]);
     db.database().drop().await.unwrap();
 }

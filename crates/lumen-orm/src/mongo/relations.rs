@@ -3,7 +3,8 @@
 //! collects the link values of the related documents that match (for `every`, that do not match),
 //! and the outer query keeps the documents whose key is `$in` (or not in) that list. Nested
 //! relation filters are resolved from the inside out, so a filter costs one extra statement per
-//! relation in it, never one per document.
+//! relation in it, never one per document. A many-to-many relation keeps a list of ids on each
+//! side; its filters use the same plan, with the outer `$in` on the document's id list.
 
 use std::future::Future;
 use std::pin::Pin;
@@ -68,11 +69,17 @@ fn resolve<'a, 'b: 'a>(ex: &'a mut Exec<'b>, filter: &'a Filter) -> Resolving<'a
 }
 
 async fn relation(ex: &mut Exec<'_>, quantifier: Quantifier, related: &Related) -> Result<Filter> {
-    let Link::Direct(on) = &related.link else {
-        return Err(Error::new(
-            "P2026",
-            "many-to-many relation filters are not supported on MongoDB",
-        ));
+    // `(related field, this field)`: for an id list, the outer `$in` on the list field matches a
+    // document when any of its ids is among the collected keys, so it is the same plan
+    let on = match &related.link {
+        Link::Direct(on) => on.clone(),
+        Link::IdList { list, key } => vec![(key.clone(), list.clone())],
+        Link::Through { .. } => {
+            return Err(Error::new(
+                "P2026",
+                "MongoDB has no join tables: a many-to-many relation keeps id lists on both sides",
+            ));
+        }
     };
     let inner = resolve(&mut *ex, &related.filter).await?;
     // `every` keeps the documents that have no related document failing the condition

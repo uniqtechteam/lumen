@@ -215,6 +215,13 @@ impl Writer {
                     links.push(format!("{join}.{} = {alias}.{}", ident(j), ident(r)));
                 }
             }
+            Link::IdList { list, key } => {
+                links.push(format!(
+                    "{alias}.{} = ANY({outer}.{})",
+                    ident(key),
+                    ident(list)
+                ));
+            }
         }
         if links.is_empty() {
             links.push("TRUE".to_owned());
