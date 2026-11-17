@@ -1,7 +1,5 @@
 //! Values sent to the database as parameters. They are never written into the SQL text.
 
-use chrono::{DateTime, NaiveDateTime, Utc};
-
 /// One parameter. Variants that Postgres cannot infer from a plain text parameter carry the cast
 /// the placeholder needs (`$1::uuid`, `$1::numeric`, `$1::"Role"`).
 #[derive(Debug, Clone, PartialEq)]
@@ -22,10 +20,15 @@ pub enum Value {
     Bytes(Vec<u8>),
     /// `jsonb`.
     Json(serde_json::Value),
-    /// `timestamptz`.
-    DateTime(DateTime<Utc>),
-    /// `timestamp` (without time zone), the default column type for `DateTime`.
-    Timestamp(NaiveDateTime),
+    /// `timestamptz`, as microseconds since 1970-01-01 00:00 UTC.
+    DateTime(i64),
+    /// `timestamp` (without time zone), the default column type for `DateTime`, as microseconds
+    /// since 1970-01-01 00:00 (read as UTC).
+    Timestamp(i64),
+    /// `date`, as days since 1970-01-01.
+    Date(i32),
+    /// `time` (without time zone), as microseconds since midnight.
+    Time(i64),
     /// `uuid`, as text (cast with `::uuid`).
     Uuid(String),
     /// `numeric`, as text so no precision is lost (cast with `::numeric`).
@@ -39,6 +42,18 @@ pub enum Value {
 }
 
 impl Value {
+    /// The current time for a `timestamp` column (`@updatedAt` on a plain `DateTime`).
+    #[must_use]
+    pub fn timestamp_now() -> Self {
+        Self::Timestamp(now_micros())
+    }
+
+    /// The current time for a `timestamptz` column.
+    #[must_use]
+    pub fn timestamptz_now() -> Self {
+        Self::DateTime(now_micros())
+    }
+
     /// The cast the placeholder needs, if any.
     #[must_use]
     pub fn cast(&self) -> Option<String> {
@@ -71,8 +86,6 @@ from! {
     &str => Text,
     Vec<u8> => Bytes,
     serde_json::Value => Json,
-    DateTime<Utc> => DateTime,
-    NaiveDateTime => Timestamp,
 }
 
 impl From<uuid::Uuid> for Value {
@@ -120,5 +133,14 @@ impl<T> From<T> for Set<T> {
 impl<T: Into<Value>> From<Option<T>> for Value {
     fn from(v: Option<T>) -> Self {
         v.map_or(Self::Null, Into::into)
+    }
+}
+
+/// Microseconds since the Unix epoch, from the system clock.
+fn now_micros() -> i64 {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    match SystemTime::now().duration_since(UNIX_EPOCH) {
+        Ok(d) => i64::try_from(d.as_micros()).unwrap_or(i64::MAX),
+        Err(e) => i64::try_from(e.duration().as_micros()).map_or(i64::MIN, |us| -us),
     }
 }

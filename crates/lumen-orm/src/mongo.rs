@@ -33,8 +33,7 @@ impl From<ObjectId> for Value {
 
 impl From<DateTime> for Value {
     fn from(v: DateTime) -> Self {
-        chrono::DateTime::from_timestamp_millis(v.timestamp_millis())
-            .map_or(Self::Null, Self::DateTime)
+        Self::DateTime(v.timestamp_millis().saturating_mul(1000))
     }
 }
 
@@ -84,9 +83,17 @@ pub fn bson_of(value: &Value) -> Result<Bson> {
             bytes: b.clone(),
         }),
         Value::Json(j) => bson::to_bson(j).map_err(|e| Error::new("P2023", e.to_string()))?,
-        Value::DateTime(t) => Bson::DateTime(bson::DateTime::from_millis(t.timestamp_millis())),
-        Value::Timestamp(t) => {
-            Bson::DateTime(bson::DateTime::from_millis(t.and_utc().timestamp_millis()))
+        Value::DateTime(us) | Value::Timestamp(us) => {
+            Bson::DateTime(bson::DateTime::from_millis(us.div_euclid(1000)))
+        }
+        Value::Date(days) => Bson::DateTime(bson::DateTime::from_millis(
+            crate::dates::day_micros(*days) / 1000,
+        )),
+        Value::Time(_) => {
+            return Err(Error::new(
+                "P2023",
+                "MongoDB has no time-of-day type; store a DateTime instead",
+            ));
         }
         Value::ObjectId(s) => Bson::ObjectId(
             bson::oid::ObjectId::parse_str(s)

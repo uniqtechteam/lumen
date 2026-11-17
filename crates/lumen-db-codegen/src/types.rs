@@ -1,7 +1,7 @@
 //! Rust names and types for schema items.
 
 use lumen_schema::ast::Arity;
-use lumen_schema::checked::{Field, FieldKind, Provider, ScalarType, Schema};
+use lumen_schema::checked::{Field, FieldKind, Provider, ScalarType, Schema, StringOrEnv};
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::quote;
 
@@ -60,6 +60,74 @@ pub fn ident(name: &str) -> Ident {
     }
 }
 
+/// The crate a Postgres client's dates come from: the lumen generator's `dateTimeType` setting.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Dates {
+    /// `time` (the default).
+    Time,
+    /// `chrono`, which needs lumen-orm's `chrono` feature.
+    Chrono,
+}
+
+/// The `dateTimeType` the schema's lumen generator asks for.
+///
+/// # Errors
+/// When the setting names something other than `time` or `chrono`.
+pub fn dates(schema: &Schema) -> Result<Dates, String> {
+    let setting = schema
+        .generators
+        .iter()
+        .filter(|g| matches!(&g.provider, Some(StringOrEnv::Literal(p)) if p.starts_with("lumen")))
+        .flat_map(|g| &g.settings)
+        .find(|(name, _)| name == "dateTimeType");
+    match setting.map(|(_, v)| v.as_str()) {
+        None | Some("time") => Ok(Dates::Time),
+        Some("chrono") => Ok(Dates::Chrono),
+        Some(other) => Err(format!(
+            "dateTimeType = \"{other}\" is not supported; use \"time\" (the default) or \"chrono\""
+        )),
+    }
+}
+
+/// A Postgres `DateTime` field's type, by native type: `@db.Timestamptz` keeps the offset,
+/// `@db.Date` and `@db.Time` hold a date or a time of day, anything else is a UTC timestamp.
+fn date_type(schema: &Schema, native: Option<&str>) -> TokenStream {
+    match (dates(schema).unwrap_or(Dates::Time), native) {
+        (Dates::Time, Some("Timestamptz")) => quote!(::lumen_orm::time::OffsetDateTime),
+        (Dates::Time, Some("Date")) => quote!(::lumen_orm::time::Date),
+        (Dates::Time, Some("Time")) => quote!(::lumen_orm::time::Time),
+        (Dates::Time, _) => quote!(::lumen_orm::time::PrimitiveDateTime),
+        (Dates::Chrono, Some("Timestamptz")) => {
+            quote!(::lumen_orm::chrono::DateTime<::lumen_orm::chrono::Utc>)
+        }
+        (Dates::Chrono, Some("Date")) => quote!(::lumen_orm::chrono::NaiveDate),
+        (Dates::Chrono, Some("Time")) => quote!(::lumen_orm::chrono::NaiveTime),
+        (Dates::Chrono, _) => quote!(::lumen_orm::chrono::NaiveDateTime),
+    }
+}
+
+/// `#[serde(with = ..)]` for a Postgres record field, so `time` dates are ISO 8601 text in JSON
+/// (`chrono` does that by itself; `time::Date` and `time::Time` already are).
+pub fn serde_with(schema: &Schema, field: &Field) -> Option<TokenStream> {
+    if field.kind != FieldKind::Scalar(ScalarType::DateTime)
+        || schema.provider() == Provider::MongoDb
+        || dates(schema).unwrap_or(Dates::Time) != Dates::Time
+    {
+        return None;
+    }
+    let module = match field.native_type.as_ref().map(|n| n.name.as_str()) {
+        Some("Date" | "Time") => return None,
+        Some("Timestamptz") => "::lumen_orm::time_serde::rfc3339",
+        _ => "::lumen_orm::time_serde::timestamp",
+    };
+    let path = match field.arity {
+        Arity::Required => module.to_owned(),
+        Arity::Optional => format!("{module}::option"),
+        Arity::List => return None,
+    };
+    Some(quote!(#[serde(with = #path)]))
+}
+
 /// The Rust type of a field's value without `Option` or `Vec`, as seen from a model module.
 pub fn base_type(schema: &Schema, field: &Field) -> Option<TokenStream> {
     base_type_at(schema, field, 1)
@@ -80,10 +148,7 @@ pub fn base_type_at(schema: &Schema, field: &Field, depth: usize) -> Option<Toke
             (ScalarType::Float, _) => quote!(f64),
             (ScalarType::Decimal, _) => quote!(::lumen_orm::rust_decimal::Decimal),
             (ScalarType::Boolean, _) => quote!(bool),
-            (ScalarType::DateTime, Some("Timestamptz")) => {
-                quote!(::lumen_orm::chrono::DateTime<::lumen_orm::chrono::Utc>)
-            }
-            (ScalarType::DateTime, _) => quote!(::lumen_orm::chrono::NaiveDateTime),
+            (ScalarType::DateTime, _) => date_type(schema, native),
             (ScalarType::Json, _) => quote!(::lumen_orm::serde_json::Value),
             (ScalarType::Bytes, _) => quote!(Vec<u8>),
         },

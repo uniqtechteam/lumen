@@ -20,6 +20,7 @@
 //! # Ok(()) }
 //! ```
 
+mod dates;
 mod db;
 mod error;
 mod filter;
@@ -30,6 +31,8 @@ pub mod nested;
 mod query;
 mod value;
 
+#[cfg(feature = "time")]
+pub use dates::serde as time_serde;
 pub use db::{Db, Isolation, Run, Tx};
 pub use error::{Error, ErrorInfo, Result};
 pub use filter::{Col, Filter, Link, Mode, Op, Quantifier, Related, col};
@@ -39,7 +42,14 @@ pub use value::{Set, Value};
 /// sqlx, re-exported so generated code and apps use the same version.
 pub use sqlx;
 /// The crates the generated client's types come from, re-exported so a project only needs lumen.
-pub use {chrono, rust_decimal, serde, serde_json, uuid};
+pub use {rust_decimal, serde, serde_json, uuid};
+
+/// `chrono`, for clients generated with `dateTimeType = "chrono"` (the `chrono` feature).
+#[cfg(feature = "chrono")]
+pub use chrono;
+/// `time`, the date and time types of generated clients (the default `time` feature).
+#[cfg(feature = "time")]
+pub use time;
 
 /// The version of this crate.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
