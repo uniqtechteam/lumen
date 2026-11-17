@@ -280,11 +280,13 @@ Passing text to an `Int` field does not compile.
 | `{ profile: { is: null } }`, `{ profile: { isNot: null } }` | `user::profile::is_null()`, `user::profile::is_not_null()` (optional relations only) |
 
 Relation filters nest inside each other and inside `and`, `or` and `!`, and work on one-to-one,
-one-to-many and (on Postgres) many-to-many relations. As in Prisma, `every` is true for a record
+one-to-many and many-to-many relations. As in Prisma, `every` is true for a record
 with no related records, and `is_not` matches records with no related record. On Postgres they are
 `EXISTS` subqueries. MongoDB has no joins in a plain find, so lumen first collects the keys of the
 related documents that match, with one aggregation per relation filter, and then matches on those
-keys with `$in`. Many-to-many relation filters are not available on MongoDB yet.
+keys with `$in`. A many-to-many relation on MongoDB is written as in Prisma, with a list of ids on
+both sides (`labelIds String[] @db.ObjectId` and `@relation(fields: [labelIds], references: [id])`),
+and its filters match on that list.
 
 ## Types side by side
 
@@ -302,9 +304,9 @@ keys with `$in`. Many-to-many relation filters are not available on MongoDB yet.
 ## Errors side by side
 
 Every error has Prisma's `code` (`P2002`, `P2003`, `P2025`, ...) and a plain `message`. A unique
-violation on Postgres also lists the fields behind the constraint in `err.fields` (on MongoDB it
-is empty in 0.1, and the message names the index). `err.http_status()` turns
-the code into the status a web API should answer with.
+violation also lists the schema fields behind the constraint (on MongoDB, the unique index) in
+`err.fields`, like Prisma's `meta.target`. `err.http_status()` turns the code into the status a web
+API should answer with.
 
 ## Differences to keep in mind
 
@@ -326,8 +328,8 @@ the code into the status a web API should answer with.
   Postgres. The README's Limits section has the current list.
 - **`migrate diff`** takes `--from-empty` or compares with the database, instead of Prisma's
   `--from-..` and `--to-..` flags.
-- **MongoDB:** many-to-many relation filters are not there yet, and on a duplicate `err.fields` is
-  empty (the message names the index). Nested writes need a replica set, as transactions do.
+- **MongoDB:** nested writes need a replica set, as transactions do. Many-to-many relations can
+  be filtered but not included yet, and lumen does not keep the two id lists in step for you.
 - **Databases:** Postgres and MongoDB only. No SQLite, MySQL or SQL Server.
 
 ## Credits

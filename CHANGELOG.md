@@ -6,6 +6,24 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Added
+
+- Many-to-many relations on MongoDB, kept as a list of ids on both sides
+  (`labelIds String[] @db.ObjectId` with `@relation(fields: [labelIds], references: [id])`).
+  `some`, `every` and `none` work on them in the generated client and through
+  `Related::id_list` in `lumen-orm`, nested too, with the same results as on Postgres: an empty
+  list makes `every` and `none` true and `some` false, and ids that point at nothing are ignored.
+- On MongoDB a duplicate (P2002) now fills `err.fields` with the schema field names of the unique
+  index it broke (`@map`'d names come back as the schema names, `_id` as the id field) and puts the
+  index name in `err.constraint`, as Postgres does. The generated client sets this up; with
+  `lumen-orm` alone, pass the names to `MongoDb::with_constraints`.
+
+### Changed
+
+- `lumen_schema::checked::Relation` has two new fields, `b_fields` and `b_references`, for the
+  second id list of a MongoDB many-to-many, and `lumen_orm::Link` a new `IdList` variant. Code
+  that builds a `Relation` by hand or matches `Link` exhaustively needs to add them.
+
 ## [0.1.1] - 2026-11-17
 
 ### Changed
