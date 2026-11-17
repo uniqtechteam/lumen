@@ -422,3 +422,36 @@ async fn indexes_keys_and_actions_change() {
         m.sql
     );
 }
+
+#[test]
+fn long_constraint_names_keep_their_suffix_as_prisma_does() {
+    // the names Prisma 6.19 gives this model (langfuse's billing_meter_backups)
+    let s = schema(
+        "model BillingMeterBackup {\n  stripeCustomerId String   @map(\"stripe_customer_id\")\n  meterId          String   @map(\"meter_id\")\n  startTime        DateTime @map(\"start_time\")\n  endTime          DateTime @map(\"end_time\")\n\n  @@unique([stripeCustomerId, meterId, startTime, endTime])\n  @@index([stripeCustomerId, meterId, startTime, endTime])\n  @@map(\"billing_meter_backups\")\n}\n",
+    );
+    let shape = calculate(&s);
+    let mut names: Vec<&str> = shape.tables[0]
+        .indexes
+        .iter()
+        .map(|i| i.name.as_str())
+        .collect();
+    names.sort_unstable();
+    assert_eq!(
+        names,
+        [
+            "billing_meter_backups_stripe_customer_id_meter_id_start_tim_idx",
+            "billing_meter_backups_stripe_customer_id_meter_id_start_tim_key",
+        ]
+    );
+}
+
+#[test]
+fn ignored_models_keep_their_tables() {
+    // `@@ignore` leaves a model out of the client; Prisma still creates and keeps its table
+    let shape = calculate(&schema(
+        "model Store {\n  key   String  @id\n  items Item[]\n\n  @@ignore\n}\n\nmodel Item {\n  id       Int    @id\n  storeKey String\n  store    Store  @relation(fields: [storeKey], references: [key])\n\n  @@ignore\n}\n",
+    ));
+    let names: Vec<&str> = shape.tables.iter().map(|t| t.name.as_str()).collect();
+    assert_eq!(names, ["Item", "Store"]);
+    assert_eq!(shape.tables[0].foreign_keys[0].name, "Item_storeKey_fkey");
+}
