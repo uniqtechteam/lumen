@@ -34,3 +34,14 @@ async fn mongodb_answers() {
         .await
         .expect("ping");
 }
+
+#[tokio::test]
+async fn a_url_that_is_not_postgres_fails_at_once() {
+    let started = std::time::Instant::now();
+    let err = lumen_orm::Db::connect("file:./dev.db")
+        .await
+        .expect_err("a file: URL is not Postgres");
+    assert_eq!(err.code, "P1013");
+    assert!(err.message.contains("`file:`"), "{}", err.message);
+    assert!(started.elapsed() < std::time::Duration::from_secs(5));
+}
