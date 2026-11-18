@@ -393,7 +393,7 @@ Without a terminal, a command that would lose data stops and asks you to pass
   503). A per-statement limit goes in the URL:
   `postgresql://..?options=-c%20statement_timeout%3D10000` (milliseconds).
 - A serializable or repeatable-read transaction that conflicts, and a deadlock, fail with P2034
-  (`err.http_status()` is 409). Run the whole transaction again when you get it; lumen does not
+  (`err.http_status()` is 409), as does a write conflict between MongoDB transactions. Run the whole transaction again when you get it; lumen does not
   retry on its own, because only you know whether the work in it can be repeated.
 - A transaction whose future is dropped (a timeout, a client that went away) is rolled back
   before its connection is used again.
