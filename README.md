@@ -4,7 +4,7 @@ lumen is a data layer for Rust built around one schema file. You describe your m
 lumen writes the migrations and a type-safe client for them. Under the client sits a query builder
 for the queries a generated client cannot express. It works with Postgres and MongoDB.
 
-**Status:** 0.1. Tested on Postgres 13 to 17 and MongoDB 7. The Limits section lists what waits for 0.2.
+**Status:** 0.2. Tested on Postgres 13 to 17 and MongoDB 7. The Limits section lists what is not built yet.
 
 ```console
 $ lumen init
@@ -320,7 +320,7 @@ its error rolls back the whole thing.
 | Schema: parse, check with "did you mean" hints, `format` | yes | yes |
 | `migrate dev / deploy / status / reset / diff / resolve` | yes | (uses `db push`) |
 | `db push` | tables, columns, indexes, foreign keys, enums | collections and indexes |
-| `db pull` | 0.2 | by sampling documents |
+| `db pull` | planned | by sampling documents |
 | Generated client: filters, ordering, paging, create, update, upsert, delete, count | yes | yes |
 | Relation filters (`some`, `every`, `none`, `is`, `is_not`) | yes (`EXISTS`) | yes, many-to-many through id lists (one extra statement per relation filter) |
 | Includes, one statement per level | yes | yes (`$in`) |
@@ -409,7 +409,7 @@ Without a terminal, a command that would lose data stops and asks you to pass
 - CI runs every database test on Linux against Postgres 13, 14, 15, 16 and 17 and MongoDB 7, and
   the Postgres tests on macOS and Windows against Postgres 17. The MongoDB tests run on Linux
   only: they need a replica set in Docker, which the macOS and Windows runners do not have.
-- Planned for 0.2, not in 0.1:
+- Planned, not built yet:
   - aggregates and `groupBy`
   - cursor pagination, and ordering by the number of related rows
   - a `select` builder on `find_many`, and `utoipa::ToSchema` on the generated types
