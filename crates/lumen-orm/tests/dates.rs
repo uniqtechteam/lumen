@@ -118,7 +118,9 @@ macro_rules! scenario {
             clock: $v::clock(23, 59, 59, 999_999),
             ends_at: Some($v::at(1999, 12, 31, 23, 59, 59, 999_000)),
             ends_at_tz: None,
-            created_at: None,
+            // set by hand: the database default has millisecond precision, so two rows created
+            // in the same millisecond would get the same value
+            created_at: Some($v::at(2100, 1, 1, 0, 0, 0, 0)),
             updated_at: None,
         };
         let a = client.event().create(first.clone()).await.unwrap();
