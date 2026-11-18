@@ -50,6 +50,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   a transaction failed to compile with "implementation of `AsyncFnOnce` is not general enough".
   The closure now takes `&mut Tx<'_>` for any lifetime, so closures written as before keep
   working.
+- On MongoDB a value compared with `equals` (or in a composite key) that is a document, such as
+  JSON taken from a request, is matched as a value with `$eq`. Before, `{"$gt": ""}` was read as
+  an operator and matched every document. A field name that starts with `$` (`$where`, `$expr`)
+  is refused with P2009 instead of being sent as an operator.
+- On MongoDB a write conflict between transactions, and any other error the driver labels
+  `TransientTransactionError`, is P2034 ("try again", HTTP 409) as on Postgres, instead of P2010.
+  A server that cannot be reached is P1001 (503).
 - A `///` comment at the end of a field line no longer stops the schema from parsing. It joins
   the field's documentation.
 - `@@index(email)`, `@@unique(email)` and `@relation(fields: authorId, references: id)` are

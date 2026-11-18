@@ -122,13 +122,33 @@ fn regex(pattern: String, mode: Mode) -> Bson {
     })
 }
 
+/// A value to compare with as it is. A document (from JSON, say) would otherwise be read as
+/// operators, so `{"$gt": ""}` from a request would match every document; `$eq` keeps it a value.
+fn literal(value: Bson) -> Bson {
+    match value {
+        Bson::Document(_) => Bson::Document(doc! { "$eq": value }),
+        other => other,
+    }
+}
+
+/// A field name for a query. Names come from the schema in the generated client, but a dynamic
+/// query may take one from a request, and a `$` name (`$where`, `$expr`) would be an operator.
+fn field_name(name: &str) -> Result<String> {
+    if name.starts_with('$') {
+        return Err(Error::invalid_query(format!(
+            "`{name}` is not a field name: field names cannot start with `$`"
+        )));
+    }
+    Ok(name.to_owned())
+}
+
 fn op_doc(op: &Op) -> Result<Bson> {
     Ok(match op {
         Op::Equals(v, Mode::Insensitive) => match v {
             Value::Text(s) => regex(format!("^{}$", regex_escape(s)), Mode::Insensitive),
-            other => bson_of(other)?,
+            other => literal(bson_of(other)?),
         },
-        Op::Equals(v, Mode::Default) => bson_of(v)?,
+        Op::Equals(v, Mode::Default) => literal(bson_of(v)?),
         Op::NotEquals(v, _) => Bson::Document(doc! { "$ne": bson_of(v)? }),
         Op::In(vs) | Op::Any(vs) => {
             Bson::Document(doc! { "$in": vs.iter().map(bson_of).collect::<Result<Vec<_>>>()? })
@@ -168,7 +188,7 @@ pub fn query_of(filter: &Filter) -> Result<Document> {
         Filter::Not(inner) => doc! { "$nor": [query_of(inner)?] },
         Filter::Column(field, op) => {
             let mut d = Document::new();
-            d.insert(field.clone(), op_doc(op)?);
+            d.insert(field_name(field)?, op_doc(op)?);
             d
         }
         Filter::Tuples(fields, rows) => {
@@ -177,7 +197,7 @@ pub fn query_of(filter: &Filter) -> Result<Document> {
                 .map(|row| {
                     let mut d = Document::new();
                     for (f, v) in fields.iter().zip(row) {
-                        d.insert(f.clone(), bson_of(v)?);
+                        d.insert(field_name(f)?, literal(bson_of(v)?));
                     }
                     Ok(Bson::Document(d))
                 })
@@ -970,6 +990,24 @@ mod tests {
     use crate::filter::col;
     use crate::value::Value;
     use mongodb::bson::doc;
+
+    #[test]
+    fn values_from_requests_stay_values() {
+        let from_request = serde_json::json!({ "$gt": "" });
+        let q = query_of(&col("meta").equals(from_request.clone())).unwrap_or_default();
+        assert_eq!(q, doc! { "meta": { "$eq": { "$gt": "" } } });
+        let q = query_of(&col("meta").not_equals(from_request)).unwrap_or_default();
+        assert_eq!(q, doc! { "meta": { "$ne": { "$gt": "" } } });
+        assert_eq!(
+            query_of(&col("name").equals("$gt")).unwrap_or_default(),
+            doc! { "name": "$gt" },
+            "a string is never an operator"
+        );
+        let e = query_of(&col("$where").equals("sleep(1000)")).unwrap_err();
+        assert_eq!(e.code, "P2009");
+        let e = query_of(&!col("$expr").is_null()).unwrap_err();
+        assert_eq!(e.code, "P2009");
+    }
 
     #[test]
     fn filters_become_queries() {
