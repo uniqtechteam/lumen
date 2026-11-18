@@ -410,3 +410,98 @@ async fn ac_008_postgres_db_pull_reads_a_hand_written_database() {
         schema
     );
 }
+
+/// A table and its columns: (name, type, nullable), sorted.
+type Columns = (String, Vec<(String, String, bool)>);
+
+/// The tables and columns a schema asks for.
+fn tables_of(text: &str) -> Vec<Columns> {
+    let file = lumen_schema::SourceFile::new("schema.prisma", text);
+    let (schema, d) = lumen_schema::check(&file);
+    assert!(!d.has_errors(), "{}\n{text}", d.render(&file));
+    lumen_migrate::calculate(&schema)
+        .tables
+        .into_iter()
+        .map(|t| {
+            let mut cols: Vec<(String, String, bool)> = t
+                .columns
+                .into_iter()
+                // Postgres's default precision is 6; Prisma writes it out, lumen writes the type
+                // as the database prints it
+                .map(|c| {
+                    (
+                        c.name,
+                        c.ty.replace("(6) with", " with")
+                            .replace("(6) without", " without"),
+                        c.nullable,
+                    )
+                })
+                .collect();
+            cols.sort();
+            (t.name, cols)
+        })
+        .collect()
+}
+
+/// SPEC-CLI-001 AC-004 with `LUMEN_TEST_PRISMA=1`: the Prisma CLI pulls the same hand-written
+/// database, and both schemas ask for the same tables and columns. Prisma's schema is only read,
+/// never copied.
+#[tokio::test]
+async fn ac_008_prisma_pulls_the_same_tables_and_columns() {
+    if std::env::var("LUMEN_TEST_PRISMA").ok().as_deref() != Some("1") {
+        eprintln!("skipped: set LUMEN_TEST_PRISMA=1 to run against the Prisma CLI");
+        return;
+    }
+    let Some(url) = fresh_postgres("prisma_pull").await else {
+        eprintln!("skipped: LUMEN_TEST_POSTGRES_URL is not set");
+        return;
+    };
+    let pool = PgPool::connect(&url).await.unwrap();
+    sqlx::raw_sql(ODD_DATABASE).execute(&pool).await.unwrap();
+    pool.close().await;
+    let dir = tempfile::tempdir().unwrap();
+    let d = dir.path();
+    ok(d, &["init", "--url", &url]);
+    let ours = String::from_utf8(ok(d, &["db", "pull", "--print"]).stdout).unwrap();
+    let schema = d.join("prisma/schema.prisma");
+    std::fs::write(
+        &schema,
+        format!("datasource db {{\n  provider = \"postgresql\"\n  url      = \"{url}\"\n}}\n"),
+    )
+    .unwrap();
+    let out = Command::new(if cfg!(windows) { "npx.cmd" } else { "npx" })
+        .args([
+            "--yes",
+            "prisma@6.19.3",
+            "db",
+            "pull",
+            "--print",
+            "--schema",
+        ])
+        .arg(&schema)
+        .env_remove("DATABASE_URL")
+        .output()
+        .expect("npx is installed");
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let theirs = String::from_utf8(out.stdout).unwrap();
+    let (a, b) = (tables_of(&ours), tables_of(&theirs));
+    let differ: Vec<String> = a
+        .iter()
+        .filter(|t| !b.contains(t))
+        .map(|t| format!("lumen: {t:?}\nPrisma: {:?}", b.iter().find(|x| x.0 == t.0)))
+        .chain(
+            b.iter()
+                .filter(|t| !a.iter().any(|x| x.0 == t.0))
+                .map(|t| format!("only Prisma: {t:?}")),
+        )
+        .collect();
+    assert!(
+        differ.is_empty(),
+        "{}\n\nPrisma's schema:\n{theirs}",
+        differ.join("\n")
+    );
+}
