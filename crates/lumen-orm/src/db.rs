@@ -421,7 +421,7 @@ impl Db {
     /// The error `f` returned, or a coded [`Error`] from beginning or committing.
     pub async fn transaction<T, F>(&self, f: F) -> Result<T>
     where
-        F: AsyncFnOnce(&mut Tx<'static>) -> Result<T>,
+        F: for<'s> AsyncFnOnce(&mut Tx<'s>) -> Result<T>,
     {
         let mut tx = self.begin().await?;
         finish(f(&mut tx).await, tx).await
@@ -433,7 +433,7 @@ impl Db {
     /// As [`Db::transaction`]; P2034 when a serializable transaction conflicts.
     pub async fn transaction_with<T, F>(&self, isolation: Isolation, f: F) -> Result<T>
     where
-        F: AsyncFnOnce(&mut Tx<'static>) -> Result<T>,
+        F: for<'s> AsyncFnOnce(&mut Tx<'s>) -> Result<T>,
     {
         let mut tx = self.begin().await?;
         let level = match isolation {
