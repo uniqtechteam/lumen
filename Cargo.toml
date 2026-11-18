@@ -9,7 +9,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.1.1"
+version = "0.2.0"
 edition = "2024"
 rust-version = "1.88"
 license = "MIT OR Apache-2.0"
@@ -21,10 +21,10 @@ keywords = ["orm", "database", "migrations", "postgres", "mongodb"]
 categories = ["database"]
 
 [workspace.dependencies]
-lumen-schema = { path = "crates/lumen-schema", version = "0.1.1" }
-lumen-migrate = { path = "crates/lumen-migrate", version = "0.1.1" }
-lumen-orm = { path = "crates/lumen-orm", version = "0.1.1" }
-lumen-db-codegen = { path = "crates/lumen-db-codegen", version = "0.1.1" }
+lumen-schema = { path = "crates/lumen-schema", version = "0.2.0" }
+lumen-migrate = { path = "crates/lumen-migrate", version = "0.2.0" }
+lumen-orm = { path = "crates/lumen-orm", version = "0.2.0" }
+lumen-db-codegen = { path = "crates/lumen-db-codegen", version = "0.2.0" }
 clap = { version = "4.5", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

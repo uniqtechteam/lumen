@@ -6,6 +6,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-18
+
 ### Changed
 
 - **Breaking:** dates are `time` types by default. A generated client now uses
@@ -235,6 +237,7 @@ still `lumen`.
   `postgresql://` at once with P1013. Before, a `file:` URL left over from another tool waited
   30 seconds for the pool and then said the database could not be reached.
 
-[Unreleased]: https://github.com/uniqtechteam/lumen/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/uniqtechteam/lumen/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/uniqtechteam/lumen/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/uniqtechteam/lumen/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/uniqtechteam/lumen/releases/tag/v0.1.0
