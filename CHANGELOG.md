@@ -17,7 +17,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - `lumen generate --watch` writes the client again each time the schema file is saved, one line
   per run, and keeps watching when the schema has errors.
 - Partial indexes: `@@index([..], where: raw("deleted_at IS NULL"))`, and `where: { archived: false }`
-  for simple conditions, create the index with its `WHERE`, and migrations compare it.
+  for simple conditions, create the index with its `WHERE`, and migrations compare it. A schema
+  that already has `where:` was built as a full index before, so the next `lumen migrate dev`
+  recreates that index with its `WHERE`.
 
 ### Fixed
 
