@@ -429,3 +429,45 @@ async fn a_duplicate_names_the_fields_of_the_unique_index() {
     );
     db.database().drop().await.unwrap();
 }
+
+#[tokio::test]
+async fn a_write_conflict_is_p2034_and_a_request_document_is_a_value() {
+    let Some(db) = setup().await else { return };
+    // the outer transaction holds a write to Lamp; a second one writing it conflicts
+    let inner = db
+        .transaction(async |tx| {
+            let note = vec![("note".into(), Value::from("outer"))];
+            lumen_orm::mongo::MongoRun::update_many(tx, "Item", Some(&col("id").equals(1)), note)
+                .await?;
+            let conflict = db
+                .transaction(async |other| {
+                    let note = vec![("note".into(), Value::from("inner"))];
+                    lumen_orm::mongo::MongoRun::update_many(
+                        other,
+                        "Item",
+                        Some(&col("id").equals(1)),
+                        note,
+                    )
+                    .await
+                })
+                .await;
+            Ok(conflict)
+        })
+        .await
+        .unwrap();
+    let e = inner.unwrap_err();
+    assert_eq!((e.code, e.http_status()), ("P2034", 409), "{e}");
+
+    // a JSON body that looks like an operator matches nothing instead of everything
+    let from_request = serde_json::json!({ "$ne": null });
+    assert_eq!(
+        ids(&db, col("name").equals(from_request)).await,
+        Vec::<i32>::new()
+    );
+    let e = db
+        .count("Item", Some(&col("$where").equals("true")))
+        .await
+        .unwrap_err();
+    assert_eq!(e.code, "P2009");
+    db.database().drop().await.unwrap();
+}

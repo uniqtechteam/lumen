@@ -30,13 +30,35 @@ fn index_of(message: &str) -> Option<&str> {
     Some(name.trim()).filter(|n| !n.is_empty())
 }
 
-/// A driver error as a coded [`Error`]; a duplicate is P2002 without fields.
+/// A driver error as a coded [`Error`]: a duplicate is P2002 without fields, an error the driver
+/// labels `TransientTransactionError` (a write conflict, say) is P2034, as a serialization failure
+/// is on Postgres, and a server that cannot be reached is P1001.
 pub(super) fn mongo_err(e: &mongodb::error::Error) -> Error {
     if let Some(message) = duplicate_message(e) {
         return Error::duplicate(index_of(message).map(str::to_owned), Vec::new());
     }
     let message = e.to_string();
-    if message.contains("Transaction numbers are only allowed") || message.contains("replica set") {
+    if e.contains_label(mongodb::error::TRANSIENT_TRANSACTION_ERROR) {
+        // another transaction wrote the same document first (WriteConflict), or the connection
+        // dropped before the commit: nothing was kept, so running it again is safe
+        return Error::new(
+            "P2034",
+            format!("the transaction conflicted with another one; try again ({message})"),
+        );
+    }
+    if matches!(
+        e.kind.as_ref(),
+        ErrorKind::ServerSelection { .. }
+            | ErrorKind::Io(_)
+            | ErrorKind::ConnectionPoolCleared { .. }
+    ) {
+        return Error::new("P1001", format!("cannot reach MongoDB: {message}"));
+    }
+    // a single server answers a transaction with "does not support retryable writes" (code 20)
+    if message.contains("Transaction numbers are only allowed")
+        || message.contains("replica set")
+        || message.contains("does not support retryable writes")
+    {
         return Error::new(
             "P2010",
             format!("MongoDB transactions need a replica set or a sharded cluster ({message})"),
