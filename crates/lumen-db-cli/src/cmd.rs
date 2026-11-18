@@ -182,6 +182,12 @@ pub fn generate(given: Option<&Path>, output: Option<&Path>) -> Result<ExitCode,
 }
 
 fn write_client(path: &Path, schema: &Schema, output: Option<&Path>) -> Result<(), Fail> {
+    eprintln!("{}", client(path, schema, output)?);
+    Ok(())
+}
+
+/// Write the client for `schema` (read from `path`); what happened, in one line.
+pub(crate) fn client(path: &Path, schema: &Schema, output: Option<&Path>) -> Result<String, Fail> {
     let out = output_path(path, schema, output);
     let shown = path.display().to_string().replace('\\', "/");
     let code = lumen_db_codegen::generate(schema, &shown)?;
@@ -190,12 +196,10 @@ fn write_client(path: &Path, schema: &Schema, output: Option<&Path>) -> Result<(
             .map_err(|e| format!("cannot create {}: {e}", dir.display()))?;
     }
     if std::fs::read_to_string(&out).is_ok_and(|old| old == code) {
-        eprintln!("{} is up to date", out.display());
-        return Ok(());
+        return Ok(format!("{} is up to date", out.display()));
     }
     std::fs::write(&out, code).map_err(|e| format!("cannot write {}: {e}", out.display()))?;
-    eprintln!("wrote the client to {}", out.display());
-    Ok(())
+    Ok(format!("wrote the client to {}", out.display()))
 }
 
 /// The project a Postgres command works on.

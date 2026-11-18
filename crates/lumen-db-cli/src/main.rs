@@ -2,6 +2,7 @@
 
 mod cmd;
 mod project;
+mod watch;
 
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -59,6 +60,9 @@ enum Command {
         /// Where to write it (else the generator's `output`, else src/db.rs).
         #[arg(long)]
         output: Option<PathBuf>,
+        /// Keep running and write the client again each time the schema file changes.
+        #[arg(long, short)]
+        watch: bool,
     },
     /// Migrations (PostgreSQL).
     Migrate {
@@ -206,7 +210,14 @@ async fn run(command: Command) -> Result<ExitCode, project::Fail> {
         }
         Command::Format { schema, check } => cmd::format(schema.as_deref(), check),
         Command::Validate { schema } => cmd::validate(schema.as_deref()),
-        Command::Generate { schema, output } => cmd::generate(schema.as_deref(), output.as_deref()),
+        Command::Generate {
+            schema,
+            output,
+            watch: true,
+        } => watch::generate(schema.as_deref(), output.as_deref()).await,
+        Command::Generate { schema, output, .. } => {
+            cmd::generate(schema.as_deref(), output.as_deref())
+        }
         Command::Migrate { command } => match command {
             Migrate::Dev {
                 schema,
