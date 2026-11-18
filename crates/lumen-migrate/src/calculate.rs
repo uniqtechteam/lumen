@@ -191,6 +191,8 @@ fn indexes(model: &Model, table: &str) -> (Option<PrimaryKey>, Vec<Index>) {
                         .as_ref()
                         .map(|a| a.to_lowercase())
                         .filter(|a| a != "btree"),
+                    predicate: index.where_sql.clone(),
+                    expression: false,
                 });
             }
         }
@@ -256,6 +258,8 @@ fn join_table(schema: &Schema, name: &str, a: ModelId, b: ModelId) -> Option<Tab
             }],
             unique: false,
             method: None,
+            predicate: None,
+            expression: false,
         }],
         foreign_keys: vec![fk("A", ma, a_col), fk("B", mb, b_col)],
     })

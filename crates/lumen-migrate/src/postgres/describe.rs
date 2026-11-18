@@ -52,9 +52,14 @@ order by 1, 2, 3";
 const INDEXES: &str = "
 select n.nspname as schema, t.relname as table, i.relname as name, x.indisunique as is_unique,
        am.amname as method,
-       array(select a.attname from unnest(x.indkey) with ordinality k(num, ord)
-             join pg_attribute a on a.attrelid = x.indrelid and a.attnum = k.num
+       array(select case when k.num = 0 then pg_get_indexdef(x.indexrelid, k.ord::int, true)
+                         else a.attname::text end
+             from unnest(x.indkey) with ordinality k(num, ord)
+             left join pg_attribute a on a.attrelid = x.indrelid and a.attnum = k.num
+             where k.ord <= x.indnkeyatts
              order by k.ord)::text[] as columns,
+       exists(select 1 from unnest(x.indkey) k(num) where k.num = 0) as expression,
+       pg_get_expr(x.indpred, x.indrelid, true) as predicate,
        array(select (o.opt & 1) = 1 from unnest(x.indoption) with ordinality o(opt, ord)
              order by o.ord)::bool[] as descending
 from pg_index x
@@ -175,6 +180,8 @@ async fn indexes(pool: &PgPool, schemas: &[String], shape: &mut Shape) -> Result
                 .collect(),
             unique: row.try_get("is_unique")?,
             method: (method != "btree").then_some(method),
+            predicate: row.try_get("predicate")?,
+            expression: row.try_get("expression")?,
         });
     }
     Ok(())
