@@ -331,3 +331,25 @@ fn a_single_field_needs_no_brackets() {
         (&[1][..], &[0][..])
     );
 }
+
+#[test]
+fn partial_index_filters_become_sql() {
+    let text = format!(
+        "{PG}model A {{\n  id Int @id\n  archived Boolean\n  deletedAt DateTime? @map(\"deleted_at\")\n  n Int\n\n  @@index([n], where: {{ archived: false, deletedAt: null, n: 3 }})\n  @@index([archived], where: raw(\"n > 2\"))\n  @@unique([n], where: {{ archived: {{ not: true }} }})\n}}\n"
+    );
+    let schema = ok("schema.prisma", &text);
+    let sql: Vec<Option<&str>> = schema.models[0]
+        .indexes
+        .iter()
+        .filter(|i| i.kind != IndexKind::PrimaryKey)
+        .map(|i| i.where_sql.as_deref())
+        .collect();
+    assert_eq!(
+        sql,
+        [
+            Some("archived = false AND deleted_at IS NULL AND n = 3"),
+            Some("n > 2"),
+            None
+        ]
+    );
+}

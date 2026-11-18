@@ -287,6 +287,8 @@ pub struct Index {
     pub algorithm: Option<String>,
     /// `where: ..` for partial indexes, as written.
     pub where_clause: Option<String>,
+    /// `where: raw("..")`: the condition as SQL, which the database index is built with.
+    pub where_sql: Option<String>,
     /// Where it is written.
     pub span: Span,
 }

@@ -190,3 +190,42 @@ async fn the_migrations_table_is_never_part_of_the_shape() {
     let names: Vec<&str> = shape.tables.iter().map(|t| t.name.as_str()).collect();
     assert_eq!(names, ["a"]);
 }
+
+#[tokio::test]
+async fn partial_expression_and_covering_indexes_are_read_as_they_are() {
+    let Some((admin, pool, name)) = fresh_database().await else {
+        return;
+    };
+    sqlx::raw_sql(
+        r#"CREATE TABLE "a" ("id" INTEGER PRIMARY KEY, "email" TEXT, "gone" TIMESTAMP, "n" INTEGER);
+CREATE UNIQUE INDEX "a_email_live" ON "a" ("email") WHERE "gone" IS NULL;
+CREATE INDEX "a_lower" ON "a" (lower("email"), "n" DESC);
+CREATE INDEX "a_n_cover" ON "a" ("n") INCLUDE ("email");"#,
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    let shape = describe(&pool, &["public".to_owned()]).await.unwrap();
+    drop_database(&admin, pool, &name).await;
+    let t = &shape.tables[0];
+    let by = |n: &str| t.indexes.iter().find(|i| i.name == n).unwrap();
+    let live = by("a_email_live");
+    assert_eq!(live.predicate.as_deref(), Some("gone IS NULL"));
+    assert!(live.unique && !live.expression);
+    let lower = by("a_lower");
+    assert!(lower.expression);
+    let cols: Vec<(&str, lumen_migrate::shape::Sort)> = lower
+        .columns
+        .iter()
+        .map(|c| (c.name.as_str(), c.sort))
+        .collect();
+    assert_eq!(
+        cols,
+        [
+            ("lower(email)", lumen_migrate::shape::Sort::Asc),
+            ("n", lumen_migrate::shape::Sort::Desc)
+        ]
+    );
+    // INCLUDE columns are not keys
+    assert_eq!(by("a_n_cover").columns.len(), 1);
+}

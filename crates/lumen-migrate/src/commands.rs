@@ -532,3 +532,21 @@ pub async fn resolve(project: &Project, name: &str, how: Resolution) -> Result<(
     }
     Ok(())
 }
+
+/// `db pull` on Postgres: read the database at `url` and write the schema for it over `file`
+/// (see [`crate::postgres::pull::pull`]).
+///
+/// # Errors
+/// When the database cannot be reached or read, or the schema file has errors.
+pub async fn db_pull(
+    url: &str,
+    file: &lumen_schema::SourceFile,
+    force: bool,
+) -> Result<crate::postgres::pull::Pulled, MigrateError> {
+    use crate::postgres::pull;
+    drop(connect(url).await?);
+    let pool = PgPool::connect(url).await?;
+    let db = pull::Database::read(&pool, &pull::schemas_of(file)).await;
+    pool.close().await;
+    pull::pull(&db?, file, force)
+}

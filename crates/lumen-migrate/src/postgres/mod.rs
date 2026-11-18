@@ -1,6 +1,7 @@
 //! Postgres: type names, default expressions and reading a live database.
 
 mod describe;
+pub mod pull;
 pub mod render;
 pub mod types;
 

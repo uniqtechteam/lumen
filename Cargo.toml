@@ -39,6 +39,7 @@ syn = { version = "2", features = ["full"] }
 prettyplease = "0.2"
 chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
 time = { version = "0.3.36", default-features = false, features = ["std", "serde-well-known", "serde-human-readable", "macros"] }
+notify = "8"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync"] }
 
 [workspace.lints.rust]

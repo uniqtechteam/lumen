@@ -28,7 +28,8 @@ lumen-db-codegen.workspace = true
 lumen-migrate.workspace = true
 lumen-schema.workspace = true
 mongodb.workspace = true
-tokio.workspace = true
+notify.workspace = true
+tokio = { workspace = true, features = ["signal", "time"] }
 
 [dev-dependencies]
 sqlx.workspace = true

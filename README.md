@@ -320,7 +320,8 @@ its error rolls back the whole thing.
 | Schema: parse, check with "did you mean" hints, `format` | yes | yes |
 | `migrate dev / deploy / status / reset / diff / resolve` | yes | (uses `db push`) |
 | `db push` | tables, columns, indexes, foreign keys, enums | collections and indexes |
-| `db pull` | planned | by sampling documents |
+| `db pull` | tables, views, enums, keys, indexes, relations; keeps your names and comments | by sampling documents |
+| `generate --watch` | yes | yes |
 | Generated client: filters, ordering, paging, create, update, upsert, delete, count | yes | yes |
 | Relation filters (`some`, `every`, `none`, `is`, `is_not`) | yes (`EXISTS`) | yes, many-to-many through id lists (one extra statement per relation filter) |
 | Includes, one statement per level | yes | yes (`$in`) |
@@ -328,6 +329,64 @@ its error rolls back the whole thing.
 | Transactions | yes, with isolation levels | yes, on a replica set |
 | Errors with stable codes (P2002, P2003, P2025, ...) | yes | yes |
 | Query builder for dynamic queries | yes | yes |
+
+## Starting from an existing database
+
+`lumen db pull` reads a Postgres database and writes the schema that describes it. It reads the
+schemas the datasource lists (else `public`), keeps the datasource and generator blocks as they
+are, and checks the result before writing it:
+
+```bash
+lumen init --url postgresql://localhost:5432/shop
+lumen db pull           # or --print to see it first
+lumen generate
+```
+
+Tables become models, views become `view` blocks and enum types become enums. Names follow Rust
+habits, with `@map` / `@@map` holding the database's name: `order_items` becomes `OrderItems`,
+`created_at` becomes `createdAt`. Foreign keys become relation fields on both sides (`author` and
+`posts` for `posts.author_id`), with a relation name when two models are related more than once.
+A join table named `_AToB` with columns `A` and `B` becomes a many-to-many relation. A column type
+the client cannot read becomes `Unsupported("..")`, and a table without a primary or unique key
+gets `@@ignore`.
+
+```mermaid
+flowchart LR
+    DB[(Postgres)] --> D[Database::read<br/>describe, views, checks]
+    F[schema.prisma<br/>as it is now] --> E[Existing<br/>names, order, comments]
+    D --> B[build<br/>fields, keys, relations]
+    E --> B
+    B --> R[render + format]
+    R --> C{check and calculate}
+    C --> W[schema.prisma]
+    C --> N[notes and drift<br/>printed]
+```
+
+*The file is read before anything is written, so a second pull starts from your names and only
+the parts the database disagrees with change.*
+
+Pull again after the database changed and the file keeps what you wrote: your names, the order of
+models and fields, comments, `@updatedAt`, client-side defaults such as `uuid()`, and relation
+names. New tables and columns are added, dropped ones removed.
+
+Some things have no place in the schema: check constraints, expression indexes, a `NOT NULL` on an
+array column. `db pull` writes a `// lumen:` note above the model for each one and lists what
+`lumen migrate dev` would still change, so nothing is dropped by surprise. Here is the summary for
+a database with a check constraint and an index on `lower(email)`:
+
+```text
+wrote 8 models, 1 view, 1 enum from the database into prisma/schema.prisma (90 ms)
+notes (what the schema cannot say is also written into it as `// lumen:` comments):
+  - CustomerAccounts: the index `customer_email_lower` is on an expression (lower("E-mail"::text)); the schema cannot say it, so `lumen migrate dev` would drop it
+  - Orders: the check constraint `total_not_negative` (CHECK (total >= 0::numeric)) is kept by the database; the schema cannot say it
+  - Orders: `wait` has the type `interval`, which the client cannot read (Unsupported)
+`lumen migrate dev` would still change the database:
+  DROP INDEX "customer_email_lower";
+check it, then run `lumen generate`
+```
+
+`--force` starts over and ignores the models already in the file. MongoDB `db pull` samples up
+to 1000 documents per collection instead.
 
 ## Configuration
 
@@ -338,7 +397,8 @@ its error rolls back the whole thing.
   it afterwards.
 - The client goes where the generator's `output` says (relative to the schema), or to `src/db.rs`.
   `lumen generate` uses the generator block whose provider is `lumen` and leaves other generator
-  blocks alone.
+  blocks alone. `lumen generate --watch` keeps running and writes it again 150 ms after each save
+  of the schema, one line per run; a schema with errors prints them and the watch goes on.
 - Migrations live in a `migrations` folder next to the schema, one folder per migration
   (`YYYYMMDDHHMMSS_name/migration.sql`) plus `migration_lock.toml`. The database keeps a history
   table of what was applied, with a checksum of each file, so an edited migration is noticed.
@@ -414,8 +474,6 @@ Without a terminal, a command that would lose data stops and asks you to pass
   - cursor pagination, and ordering by the number of related rows
   - a `select` builder on `find_many`, and `utoipa::ToSchema` on the generated types
   - many-to-many and nested includes in the generated client (the query builder already has them)
-  - `generate --watch`
-  - `db pull` for Postgres
 - On MongoDB a relation filter sends the keys of every related document that matches to the
   outer query as one `$in` list. A condition that matches hundreds of thousands of related
   documents makes a large query, and at around 800,000 ObjectIds it reaches MongoDB's 16 MB

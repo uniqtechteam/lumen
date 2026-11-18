@@ -109,8 +109,12 @@ fn index_sql(t: &TableRef, i: &Index) -> String {
         .method
         .as_ref()
         .map_or_else(String::new, |m| format!(" USING {}", m.to_uppercase()));
+    let filter = i
+        .predicate
+        .as_ref()
+        .map_or_else(String::new, |p| format!(" WHERE {p}"));
     format!(
-        "CREATE {}INDEX {} ON {}{method}({});",
+        "CREATE {}INDEX {} ON {}{method}({}){filter};",
         if i.unique { "UNIQUE " } else { "" },
         ident(&i.name),
         qualified(t),

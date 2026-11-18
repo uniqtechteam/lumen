@@ -247,7 +247,8 @@ match client.user().create(new_user).await {
 | `prisma migrate dev --name x` | `lumen migrate dev --name x` |
 | `prisma migrate deploy / status / reset / resolve` | the same names |
 | `prisma migrate diff --from-.. --to-schema-datamodel` | `lumen migrate diff [--from-empty]` |
-| `prisma db push`, `prisma db pull` | `lumen db push`; `lumen db pull` (MongoDB in 0.1) |
+| `prisma db push`, `prisma db pull` | `lumen db push`, `lumen db pull` |
+| `prisma generate --watch` | `lumen generate --watch` |
 
 ## Client calls side by side
 
@@ -331,8 +332,17 @@ API should answer with.
   a `posts` field, rather than adding a field to `User`.
 - **Not in 0.1 yet:** `select`, aggregates and `groupBy`, cursor pagination, ordering by relation
   count, includes of many-to-many relations and nested includes in the generated client,
-  `connect_or_create`, `disconnect`, `set` and nested writes inside `update`, and `db pull` for
-  Postgres. The README's Limits section has the current list.
+  `connect_or_create`, `disconnect`, `set` and nested writes inside `update`. The README's Limits
+  section has the current list.
+- **`db pull` names things the Rust way.** Prisma keeps a table's name as the model name
+  (`order_items`); lumen writes `OrderItems` with `@@map("order_items")` and camelCase fields with
+  `@map`, and names the back side of a relation after the model (`posts`, `ordersAsBuyer`).
+  A schema you already have keeps its names on a pull. lumen writes column types the way Postgres
+  prints them, so a `timestamptz` column is `@db.Timestamptz` where Prisma writes
+  `@db.Timestamptz(6)`; both are the same column. Check constraints and expression indexes get a
+  `// lumen:` note instead of Prisma's comment, and `db pull` prints what `migrate dev` would
+  still change. On the same database both pulls ask for the same tables and columns (lumen's
+  test suite checks this against the Prisma CLI).
 - **`migrate diff`** takes `--from-empty` or compares with the database, instead of Prisma's
   `--from-..` and `--to-..` flags.
 - **MongoDB:** nested writes need a replica set, as transactions do. Many-to-many relations can

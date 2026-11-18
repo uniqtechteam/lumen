@@ -94,6 +94,12 @@ pub struct Index {
     pub unique: bool,
     /// The method when it is not `btree` (`hash`, `gin`, ...).
     pub method: Option<String>,
+    /// The `WHERE` of a partial index, as Postgres prints it (`deleted_at IS NULL`).
+    #[serde(default)]
+    pub predicate: Option<String>,
+    /// Whether a key is an expression (`lower(email)`); its column name is then the expression.
+    #[serde(default)]
+    pub expression: bool,
 }
 
 /// A primary key.

@@ -9,7 +9,7 @@ use super::{
     Enum, Field, FieldKind, Index, IndexField, IndexKind, ModelKind, NativeType, Provider, Schema,
     SortOrder, defaults, native_types,
 };
-use crate::ast::{self, Arity, Attribute, Expr};
+use crate::ast::{self, Argument, Arity, Attribute, Expr};
 use crate::diagnostics::{Diagnostic, Diagnostics};
 
 const FIELD_ATTRIBUTES: [&str; 8] = [
@@ -290,6 +290,7 @@ fn single_field_index(
         mapped_name: string_arg(attr, "map", None, d),
         algorithm: None,
         where_clause: None,
+        where_sql: None,
         span: attr.span,
     })
 }
@@ -450,6 +451,7 @@ fn block_attributes(
                     _ => None,
                 };
                 let where_clause = arg(attr, "where", None).map(|e| format!("{e:?}"));
+                let where_sql = arg(attr, "where", None).and_then(|e| where_sql(e, &model.fields));
                 model.indexes.push(Index {
                     kind,
                     fields,
@@ -457,6 +459,7 @@ fn block_attributes(
                     mapped_name: string_arg(attr, "map", None, d),
                     algorithm,
                     where_clause,
+                    where_sql,
                     span: attr.span,
                 });
             }
@@ -544,6 +547,54 @@ pub(super) fn read_all(ast: &ast::SchemaAst, schema: &mut Schema, d: &mut Diagno
 }
 
 /// Checks on whole models, after relations are known.
+/// A column name as Postgres prints it inside an expression: bare when plain lower case.
+fn sql_name(name: &str) -> String {
+    let plain = name
+        .chars()
+        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
+        && name.chars().next().is_some_and(|c| !c.is_ascii_digit());
+    if plain {
+        name.to_owned()
+    } else {
+        format!("\"{}\"", name.replace('"', "\"\""))
+    }
+}
+
+/// The SQL of a partial index's `where`, the way Postgres prints it back: `raw("..")` as written,
+/// `{ archived: false, deletedAt: null }` as `archived = false AND "deletedAt" IS NULL`. `None` for
+/// a filter it cannot write.
+fn where_sql(expr: &Expr, fields: &[super::Field]) -> Option<String> {
+    match expr {
+        Expr::Function(f, args, _) if f.name == "raw" => match args.as_slice() {
+            [
+                Argument {
+                    name: None,
+                    value: Expr::String(sql, _),
+                    ..
+                },
+            ] => Some(sql.clone()),
+            _ => None,
+        },
+        Expr::Object(pairs, _) if !pairs.is_empty() => {
+            let mut parts = Vec::new();
+            for (key, value) in pairs {
+                let field = fields.iter().find(|f| f.name == key.name)?;
+                let column = sql_name(field.database_name());
+                parts.push(match value {
+                    Expr::Constant(c, _) if c == "null" => format!("{column} IS NULL"),
+                    Expr::Constant(c, _) if c == "true" || c == "false" => {
+                        format!("{column} = {c}")
+                    }
+                    Expr::Number(n, _) => format!("{column} = {n}"),
+                    _ => return None,
+                });
+            }
+            Some(parts.join(" AND "))
+        }
+        _ => None,
+    }
+}
+
 fn view_checks(model: &super::Model, d: &mut Diagnostics) {
     for index in &model.indexes {
         let problem = match index.kind {

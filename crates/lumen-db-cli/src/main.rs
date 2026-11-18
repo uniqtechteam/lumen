@@ -2,6 +2,7 @@
 
 mod cmd;
 mod project;
+mod watch;
 
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -59,6 +60,9 @@ enum Command {
         /// Where to write it (else the generator's `output`, else src/db.rs).
         #[arg(long)]
         output: Option<PathBuf>,
+        /// Keep running and write the client again each time the schema file changes.
+        #[arg(long, short)]
+        watch: bool,
     },
     /// Migrations (PostgreSQL).
     Migrate {
@@ -157,14 +161,19 @@ enum Db {
         #[arg(long)]
         skip_generate: bool,
     },
-    /// Write a schema from the database (MongoDB: by sampling documents).
+    /// Write the schema from the database: tables, views, enums, keys and relations
+    /// (PostgreSQL), or collections by sampling documents (MongoDB). A second pull keeps the
+    /// file's names, order and comments.
     Pull {
-        /// The schema file.
+        /// The schema file; its datasource says where to read from.
         #[arg(long)]
         schema: Option<PathBuf>,
         /// Print the schema instead of writing it.
         #[arg(long)]
         print: bool,
+        /// Start over: keep only the datasource and generators, not the file's models and enums.
+        #[arg(long)]
+        force: bool,
     },
 }
 
@@ -201,7 +210,14 @@ async fn run(command: Command) -> Result<ExitCode, project::Fail> {
         }
         Command::Format { schema, check } => cmd::format(schema.as_deref(), check),
         Command::Validate { schema } => cmd::validate(schema.as_deref()),
-        Command::Generate { schema, output } => cmd::generate(schema.as_deref(), output.as_deref()),
+        Command::Generate {
+            schema,
+            output,
+            watch: true,
+        } => watch::generate(schema.as_deref(), output.as_deref()).await,
+        Command::Generate { schema, output, .. } => {
+            cmd::generate(schema.as_deref(), output.as_deref())
+        }
         Command::Migrate { command } => match command {
             Migrate::Dev {
                 schema,
@@ -240,7 +256,11 @@ async fn run(command: Command) -> Result<ExitCode, project::Fail> {
                 accept_data_loss,
                 skip_generate,
             } => cmd::db_push(schema.as_deref(), accept_data_loss, skip_generate).await,
-            Db::Pull { schema, print } => cmd::db_pull(schema.as_deref(), print).await,
+            Db::Pull {
+                schema,
+                print,
+                force,
+            } => cmd::db_pull(schema.as_deref(), print, force).await,
         },
     }
 }
