@@ -42,6 +42,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Fixed
 
+- `migrate dev` creates a missing database on Windows too. There the server can close the
+  connection before the client reads "database does not exist", which showed up as "an existing
+  connection was forcibly closed".
 - A `///` comment at the end of a field line no longer stops the schema from parsing. It joins
   the field's documentation.
 - `@@index(email)`, `@@unique(email)` and `@relation(fields: authorId, references: id)` are

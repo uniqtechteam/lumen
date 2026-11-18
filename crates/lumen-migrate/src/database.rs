@@ -26,34 +26,58 @@ pub(crate) async fn connect(url: &str) -> Result<PgConnection, MigrateError> {
 /// created (the user needs `CREATEDB`).
 pub async fn ensure_database(url: &str) -> Result<Option<String>, MigrateError> {
     check_url(url)?;
-    match PgConnection::connect(url).await {
+    let refused = match PgConnection::connect(url).await {
         Ok(conn) => {
             drop(conn);
-            Ok(None)
+            return Ok(None);
         }
-        Err(sqlx::Error::Database(e)) if e.code().as_deref() == Some(NO_SUCH_DATABASE) => {
-            let name = database_of(url).ok_or_else(|| {
-                MigrateError::new(
-                    "DATABASE_URL does not name a database, e.g. postgresql://localhost:5432/app",
-                )
-            })?;
-            let mut admin = connect(&super::commands::with_database(url, "postgres")).await?;
-            sqlx::raw_sql(AssertSqlSafe(format!("CREATE DATABASE {}", ident(&name))))
-                .execute(&mut admin)
-                .await
-                .map_err(|e| {
-                    MigrateError::new(format!(
-                        "database `{name}` does not exist and cannot be created: {}",
-                        reason(&e)
-                    ))
-                })?;
-            Ok(Some(name))
+        Err(sqlx::Error::Database(e)) if e.code().as_deref() == Some(NO_SUCH_DATABASE) => None,
+        Err(e) => Some(e),
+    };
+    let name = database_of(url).ok_or_else(|| {
+        MigrateError::new(
+            "DATABASE_URL does not name a database, e.g. postgresql://localhost:5432/app",
+        )
+    })?;
+    if let Some(e) = refused {
+        // on Windows the server can close the socket before the client reads "database does not
+        // exist", which arrives as an I/O error; ask the server instead of guessing
+        let missing = matches!(e, sqlx::Error::Io(_)) && is_missing(url, &name).await;
+        if !missing {
+            return Err(MigrateError::new(format!(
+                "cannot connect to the database: {}",
+                reason(&e)
+            )));
         }
-        Err(e) => Err(MigrateError::new(format!(
-            "cannot connect to the database: {}",
-            reason(&e)
-        ))),
     }
+    let mut admin = connect(&super::commands::with_database(url, "postgres")).await?;
+    sqlx::raw_sql(AssertSqlSafe(format!("CREATE DATABASE {}", ident(&name))))
+        .execute(&mut admin)
+        .await
+        .map_err(|e| {
+            MigrateError::new(format!(
+                "database `{name}` does not exist and cannot be created: {}",
+                reason(&e)
+            ))
+        })?;
+    Ok(Some(name))
+}
+
+/// Whether the server of `url` has no database `name`, asked through the `postgres` database;
+/// `false` when that cannot be asked.
+async fn is_missing(url: &str, name: &str) -> bool {
+    let Ok(mut admin) =
+        PgConnection::connect(&super::commands::with_database(url, "postgres")).await
+    else {
+        return false;
+    };
+    sqlx::query_scalar::<_, bool>(
+        "select not exists (select 1 from pg_database where datname = $1)",
+    )
+    .bind(name)
+    .fetch_one(&mut admin)
+    .await
+    .unwrap_or(false)
 }
 
 /// A Postgres project needs a `postgresql://` (or `postgres://`) URL. Only the scheme is shown,
