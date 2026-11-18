@@ -321,4 +321,14 @@ async fn ac_007_postgres_resolve_a_failed_migration() {
     pool.close().await;
     ok(d, &["migrate", "deploy"]);
     ok(d, &["migrate", "status"]);
+
+    // an applied migration edited afterwards: deploy still succeeds, but says so
+    std::fs::write(&sql_path, format!("{good}\n-- edited\n")).unwrap();
+    let warned = ok(d, &["migrate", "deploy"]);
+    assert!(
+        stderr(&warned).contains("changed after they were applied")
+            && stderr(&warned).contains(&name),
+        "{}",
+        stderr(&warned)
+    );
 }

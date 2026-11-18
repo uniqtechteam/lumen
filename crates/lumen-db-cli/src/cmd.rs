@@ -347,6 +347,17 @@ pub async fn migrate_deploy(given: Option<&Path>) -> Result<ExitCode, Fail> {
     } else {
         listed("Applied", &applied);
     }
+    // deploy never re-runs an applied migration, so an edited file is only worth a warning here;
+    // `migrate status` fails on it
+    let s = commands::status(&project).await.map_err(|e| e.message)?;
+    listed(
+        "Warning: changed after they were applied (the database has the old version)",
+        &s.edited,
+    );
+    listed(
+        "Warning: applied but missing from the migrations folder",
+        &s.missing,
+    );
     Ok(ExitCode::SUCCESS)
 }
 
