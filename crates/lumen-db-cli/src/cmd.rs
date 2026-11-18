@@ -581,7 +581,7 @@ fn kept_generators(path: &Path) -> String {
 }
 
 /// `lumen db pull`.
-pub async fn db_pull(given: Option<&Path>, print: bool) -> Result<ExitCode, Fail> {
+pub async fn db_pull(given: Option<&Path>, print: bool, force: bool) -> Result<ExitCode, Fail> {
     let path = match project::schema_path(given) {
         Ok(p) => p,
         Err(e) => {
@@ -590,16 +590,82 @@ pub async fn db_pull(given: Option<&Path>, print: bool) -> Result<ExitCode, Fail
             ));
         }
     };
-    let (_, schema) = project::load(&path)?;
-    if schema.provider() != Provider::MongoDb {
-        return Err(
-            "`db pull` for PostgreSQL is coming in 0.2; for now it reads MongoDB only".to_owned(),
-        );
+    let text = std::fs::read_to_string(&path)
+        .map_err(|e| format!("cannot read {}: {e}", path.display()))?;
+    let file = SourceFile::new(path.display().to_string(), text);
+    let (schema, _) = lumen_schema::check(&file);
+    let Some(ds) = schema.datasource.as_ref() else {
+        return Err(format!(
+            "{} has no datasource block, so there is nothing to read from",
+            path.display()
+        ));
+    };
+    if ds.provider == Provider::MongoDb {
+        project::load(&path)?;
+        return mongo_pull_into(&path, &schema, print).await;
     }
-    let db = mongo_database(&schema, &path).await?;
+    let url = project::database_url(&schema, &Env::load(&path))?;
+    let started = std::time::Instant::now();
+    let pulled = commands::db_pull(&url, &file, force)
+        .await
+        .map_err(|e| e.message)?;
+    if print {
+        print!("{}", pulled.text);
+    } else {
+        std::fs::write(&path, &pulled.text)
+            .map_err(|e| format!("cannot write {}: {e}", path.display()))?;
+    }
+    let (models, views, enums) = pulled.counts;
+    let mut what = vec![plural(models, "model")];
+    if views > 0 {
+        what.push(plural(views, "view"));
+    }
+    what.push(plural(enums, "enum"));
+    let verb = if print { "read" } else { "wrote" };
+    eprintln!(
+        "{verb} {} from the database into {} ({} ms)",
+        what.join(", "),
+        path.display(),
+        started.elapsed().as_millis()
+    );
+    if !pulled.notes.is_empty() {
+        eprintln!("notes (also written into the schema as `// lumen:` comments):");
+        for n in &pulled.notes {
+            eprintln!("  - {n}");
+        }
+    }
+    if pulled.drift.trim().is_empty() {
+        eprintln!("the schema describes the database exactly");
+    } else {
+        eprintln!("`lumen migrate dev` would still change the database:");
+        for line in pulled
+            .drift
+            .lines()
+            .filter(|l| !l.trim().is_empty() && !l.starts_with("--"))
+        {
+            eprintln!("  {line}");
+        }
+    }
+    if !print {
+        eprintln!("check it, then run `lumen generate`");
+    }
+    Ok(ExitCode::SUCCESS)
+}
+
+fn plural(n: usize, word: &str) -> String {
+    if n == 1 {
+        format!("1 {word}")
+    } else {
+        format!("{n} {word}s")
+    }
+}
+
+/// `lumen db pull` on MongoDB: sample the collections.
+async fn mongo_pull_into(path: &Path, schema: &Schema, print: bool) -> Result<ExitCode, Fail> {
+    let db = mongo_database(schema, path).await?;
     let pulled = mongo_pull::pull(&db).await.map_err(|e| e.message)?;
     let (head, rest) = pulled.split_once("}\n").unwrap_or((&pulled, ""));
-    let text = format!("{head}}}\n{}{rest}", kept_generators(&path));
+    let text = format!("{head}}}\n{}{rest}", kept_generators(path));
     let file = SourceFile::new(path.display().to_string(), text.clone());
     let (formatted, diagnostics) = lumen_schema::format(&file);
     let formatted = if diagnostics.has_errors() {
@@ -610,7 +676,7 @@ pub async fn db_pull(given: Option<&Path>, print: bool) -> Result<ExitCode, Fail
     if print {
         print!("{formatted}");
     } else {
-        std::fs::write(&path, formatted)
+        std::fs::write(path, formatted)
             .map_err(|e| format!("cannot write {}: {e}", path.display()))?;
         eprintln!(
             "wrote {} from the database; check it, then run `lumen generate`",

@@ -9,7 +9,9 @@ use lumen_schema::checked::{
     ReferentialAction, RelationKind, ScalarType, Schema, SortOrder,
 };
 
-use crate::postgres::types::{array_literal, column_type, string_literal, type_name};
+use crate::postgres::types::{
+    array_literal, column_type, normalise_default, string_literal, type_name,
+};
 use crate::shape::{
     Action, Column, Default, EnumType, ForeignKey, Index, IndexColumn, PrimaryKey, Shape, Sort,
     Table,
@@ -20,7 +22,7 @@ const MAX_IDENTIFIER: usize = 63;
 
 /// `{body}_{suffix}`, with `body` shortened so the whole name fits in 63 bytes. Prisma keeps the
 /// suffix the same way, so `x_key` and `x_idx` on the same long column list stay two names.
-fn cut(body: &str, suffix: &str) -> String {
+pub(crate) fn cut(body: &str, suffix: &str) -> String {
     let room = MAX_IDENTIFIER - suffix.len() - 1;
     let mut end = body.len().min(room);
     while !body.is_char_boundary(end) {
@@ -84,7 +86,11 @@ fn default_of(d: &DefaultValue) -> Option<Default> {
         DefaultValue::Autoincrement => Some(Default::Sequence),
         DefaultValue::Now => Some(Default::Now),
         DefaultValue::Literal(l) => Some(Default::Literal(literal_sql(l))),
-        DefaultValue::DbGenerated(Some(sql)) => Some(Default::Expression(sql.clone())),
+        // a literal reads back without its casts, so `dbgenerated("'(0,0)'::point")` settles
+        DefaultValue::DbGenerated(Some(sql)) => match normalise_default(sql) {
+            literal @ Default::Literal(_) => Some(literal),
+            _ => Some(Default::Expression(sql.clone())),
+        },
         // made by the client, not the database
         DefaultValue::Uuid(_)
         | DefaultValue::Cuid(_)

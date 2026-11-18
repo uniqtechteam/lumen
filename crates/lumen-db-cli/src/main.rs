@@ -157,14 +157,19 @@ enum Db {
         #[arg(long)]
         skip_generate: bool,
     },
-    /// Write a schema from the database (MongoDB: by sampling documents).
+    /// Write the schema from the database: tables, views, enums, keys and relations
+    /// (PostgreSQL), or collections by sampling documents (MongoDB). A second pull keeps the
+    /// file's names, order and comments.
     Pull {
-        /// The schema file.
+        /// The schema file; its datasource says where to read from.
         #[arg(long)]
         schema: Option<PathBuf>,
         /// Print the schema instead of writing it.
         #[arg(long)]
         print: bool,
+        /// Start over: keep only the datasource and generators, not the file's models and enums.
+        #[arg(long)]
+        force: bool,
     },
 }
 
@@ -240,7 +245,11 @@ async fn run(command: Command) -> Result<ExitCode, project::Fail> {
                 accept_data_loss,
                 skip_generate,
             } => cmd::db_push(schema.as_deref(), accept_data_loss, skip_generate).await,
-            Db::Pull { schema, print } => cmd::db_pull(schema.as_deref(), print).await,
+            Db::Pull {
+                schema,
+                print,
+                force,
+            } => cmd::db_pull(schema.as_deref(), print, force).await,
         },
     }
 }
