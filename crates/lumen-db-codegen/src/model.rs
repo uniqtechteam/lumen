@@ -8,7 +8,9 @@ use lumen_schema::checked::{
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 
-use crate::types::{base_type, base_type_at, field_type, hashable, ident, pascal, snake};
+use crate::types::{
+    base_type, base_type_at, field_type, hashable, ident, pascal, serde_with, snake,
+};
 
 pub(crate) fn doc(text: Option<&str>) -> TokenStream {
     match text {
@@ -39,7 +41,8 @@ fn record(schema: &Schema, model: &Model) -> TokenStream {
         let schema_name = &f.name;
         let d = doc(f.doc.as_deref());
         let rename = (snake(&f.name) != f.name).then(|| quote!(#[serde(rename = #schema_name)]));
-        quote!(#d #rename pub #id: #ty,)
+        let with = serde_with(schema, f);
+        quote!(#d #rename #with pub #id: #ty,)
     });
     let reads = cols.iter().map(|(f, _)| {
         let id = ident(&snake(&f.name));
@@ -187,11 +190,9 @@ pub(crate) fn client_default_for(f: &Field, mongo: bool) -> Option<TokenStream> 
                 .as_ref()
                 .is_some_and(|n| n.name == "Timestamptz")
             {
-                quote!(::lumen_orm::Value::from(::lumen_orm::chrono::Utc::now()))
+                quote!(::lumen_orm::Value::timestamptz_now())
             } else {
-                quote!(::lumen_orm::Value::from(
-                    ::lumen_orm::chrono::Utc::now().naive_utc()
-                ))
+                quote!(::lumen_orm::Value::timestamp_now())
             },
         ),
         (Some(DefaultValue::Uuid(7)), _) => Some(uuid_value(f, &quote!(now_v7))),

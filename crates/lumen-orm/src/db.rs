@@ -7,6 +7,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use sqlx::postgres::{PgArguments, PgPool, PgRow, Postgres};
 use sqlx::{Arguments, AssertSqlSafe, FromRow};
 
+use crate::dates::{PgDate, PgTime, PgTimestamp, PgTimestamptz};
 use crate::error::{Error, Result};
 use crate::query::{Built, Select};
 use crate::value::Value;
@@ -71,6 +72,18 @@ fn bind_list(
     if let Some(v) = all!(Float, f64) {
         return args.add(v);
     }
+    if let Some(v) = all!(DateTime, i64) {
+        return args.add(v.into_iter().map(PgTimestamptz).collect::<Vec<_>>());
+    }
+    if let Some(v) = all!(Timestamp, i64) {
+        return args.add(v.into_iter().map(PgTimestamp).collect::<Vec<_>>());
+    }
+    if let Some(v) = all!(Date, i32) {
+        return args.add(v.into_iter().map(PgDate).collect::<Vec<_>>());
+    }
+    if let Some(v) = all!(Time, i64) {
+        return args.add(v.into_iter().map(PgTime).collect::<Vec<_>>());
+    }
     let texts: Option<Vec<String>> = items
         .iter()
         .map(|v| match v {
@@ -102,8 +115,10 @@ fn arguments(params: &[Value]) -> Result<PgArguments> {
             | Value::ObjectId(s) => args.add(s.clone()),
             Value::Bytes(b) => args.add(b.clone()),
             Value::Json(j) => args.add(sqlx::types::Json(j.clone())),
-            Value::DateTime(t) => args.add(*t),
-            Value::Timestamp(t) => args.add(*t),
+            Value::DateTime(t) => args.add(PgTimestamptz(*t)),
+            Value::Timestamp(t) => args.add(PgTimestamp(*t)),
+            Value::Date(d) => args.add(PgDate(*d)),
+            Value::Time(t) => args.add(PgTime(*t)),
             Value::List(items) => bind_list(&mut args, items),
         };
         added.map_err(|e| {

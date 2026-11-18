@@ -1,0 +1,25 @@
+// Every kind of Postgres date in one model. The client is generated twice, with `time` (the
+// default, generated/dates.rs) and with `chrono` (generated/dates_chrono.rs), and lumen-orm's
+// tests/dates.rs runs the same round trip through both.
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider     = "lumen"
+  dateTimeType = "time"
+}
+
+model Event {
+  id        Int       @id @default(autoincrement())
+  at        DateTime
+  atTz      DateTime  @db.Timestamptz(6)
+  day       DateTime  @db.Date
+  clock     DateTime  @db.Time(6)
+  endsAt    DateTime?
+  endsAtTz  DateTime? @db.Timestamptz(3)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}

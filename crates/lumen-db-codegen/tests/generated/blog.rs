@@ -113,9 +113,11 @@ pub mod user {
         pub name: Option<String>,
         pub role: super::Role,
         #[serde(rename = "createdAt")]
-        pub created_at: ::lumen_orm::chrono::NaiveDateTime,
+        #[serde(with = "::lumen_orm::time_serde::timestamp")]
+        pub created_at: ::lumen_orm::time::PrimitiveDateTime,
         #[serde(rename = "updatedAt")]
-        pub updated_at: ::lumen_orm::chrono::NaiveDateTime,
+        #[serde(with = "::lumen_orm::time_serde::timestamp")]
+        pub updated_at: ::lumen_orm::time::PrimitiveDateTime,
     }
     impl<'r> ::lumen_orm::sqlx::FromRow<'r, ::lumen_orm::sqlx::postgres::PgRow>
     for User {
@@ -377,41 +379,41 @@ pub mod user {
         /// The column.
         pub const COLUMN: &str = "created_at";
         /// Equal to `v`.
-        pub fn equals(v: ::lumen_orm::chrono::NaiveDateTime) -> ::lumen_orm::Filter {
+        pub fn equals(v: ::lumen_orm::time::PrimitiveDateTime) -> ::lumen_orm::Filter {
             ::lumen_orm::col(COLUMN).equals(::lumen_orm::Value::from(v))
         }
         /// Not equal to `v` (rows where it is NULL match too).
-        pub fn not(v: ::lumen_orm::chrono::NaiveDateTime) -> ::lumen_orm::Filter {
+        pub fn not(v: ::lumen_orm::time::PrimitiveDateTime) -> ::lumen_orm::Filter {
             ::lumen_orm::col(COLUMN).not_equals(::lumen_orm::Value::from(v))
         }
         /// One of `values`.
         pub fn is_in(
-            values: impl IntoIterator<Item = ::lumen_orm::chrono::NaiveDateTime>,
+            values: impl IntoIterator<Item = ::lumen_orm::time::PrimitiveDateTime>,
         ) -> ::lumen_orm::Filter {
             ::lumen_orm::col(COLUMN)
                 .is_in(values.into_iter().map(::lumen_orm::Value::from))
         }
         /// None of `values`.
         pub fn not_in(
-            values: impl IntoIterator<Item = ::lumen_orm::chrono::NaiveDateTime>,
+            values: impl IntoIterator<Item = ::lumen_orm::time::PrimitiveDateTime>,
         ) -> ::lumen_orm::Filter {
             ::lumen_orm::col(COLUMN)
                 .not_in(values.into_iter().map(::lumen_orm::Value::from))
         }
         /// Less than `v`.
-        pub fn lt(v: ::lumen_orm::chrono::NaiveDateTime) -> ::lumen_orm::Filter {
+        pub fn lt(v: ::lumen_orm::time::PrimitiveDateTime) -> ::lumen_orm::Filter {
             ::lumen_orm::col(COLUMN).lt(::lumen_orm::Value::from(v))
         }
         /// At most `v`.
-        pub fn lte(v: ::lumen_orm::chrono::NaiveDateTime) -> ::lumen_orm::Filter {
+        pub fn lte(v: ::lumen_orm::time::PrimitiveDateTime) -> ::lumen_orm::Filter {
             ::lumen_orm::col(COLUMN).lte(::lumen_orm::Value::from(v))
         }
         /// More than `v`.
-        pub fn gt(v: ::lumen_orm::chrono::NaiveDateTime) -> ::lumen_orm::Filter {
+        pub fn gt(v: ::lumen_orm::time::PrimitiveDateTime) -> ::lumen_orm::Filter {
             ::lumen_orm::col(COLUMN).gt(::lumen_orm::Value::from(v))
         }
         /// At least `v`.
-        pub fn gte(v: ::lumen_orm::chrono::NaiveDateTime) -> ::lumen_orm::Filter {
+        pub fn gte(v: ::lumen_orm::time::PrimitiveDateTime) -> ::lumen_orm::Filter {
             ::lumen_orm::col(COLUMN).gte(::lumen_orm::Value::from(v))
         }
         /// Smallest first.
@@ -428,41 +430,41 @@ pub mod user {
         /// The column.
         pub const COLUMN: &str = "updated_at";
         /// Equal to `v`.
-        pub fn equals(v: ::lumen_orm::chrono::NaiveDateTime) -> ::lumen_orm::Filter {
+        pub fn equals(v: ::lumen_orm::time::PrimitiveDateTime) -> ::lumen_orm::Filter {
             ::lumen_orm::col(COLUMN).equals(::lumen_orm::Value::from(v))
         }
         /// Not equal to `v` (rows where it is NULL match too).
-        pub fn not(v: ::lumen_orm::chrono::NaiveDateTime) -> ::lumen_orm::Filter {
+        pub fn not(v: ::lumen_orm::time::PrimitiveDateTime) -> ::lumen_orm::Filter {
             ::lumen_orm::col(COLUMN).not_equals(::lumen_orm::Value::from(v))
         }
         /// One of `values`.
         pub fn is_in(
-            values: impl IntoIterator<Item = ::lumen_orm::chrono::NaiveDateTime>,
+            values: impl IntoIterator<Item = ::lumen_orm::time::PrimitiveDateTime>,
         ) -> ::lumen_orm::Filter {
             ::lumen_orm::col(COLUMN)
                 .is_in(values.into_iter().map(::lumen_orm::Value::from))
         }
         /// None of `values`.
         pub fn not_in(
-            values: impl IntoIterator<Item = ::lumen_orm::chrono::NaiveDateTime>,
+            values: impl IntoIterator<Item = ::lumen_orm::time::PrimitiveDateTime>,
         ) -> ::lumen_orm::Filter {
             ::lumen_orm::col(COLUMN)
                 .not_in(values.into_iter().map(::lumen_orm::Value::from))
         }
         /// Less than `v`.
-        pub fn lt(v: ::lumen_orm::chrono::NaiveDateTime) -> ::lumen_orm::Filter {
+        pub fn lt(v: ::lumen_orm::time::PrimitiveDateTime) -> ::lumen_orm::Filter {
             ::lumen_orm::col(COLUMN).lt(::lumen_orm::Value::from(v))
         }
         /// At most `v`.
-        pub fn lte(v: ::lumen_orm::chrono::NaiveDateTime) -> ::lumen_orm::Filter {
+        pub fn lte(v: ::lumen_orm::time::PrimitiveDateTime) -> ::lumen_orm::Filter {
             ::lumen_orm::col(COLUMN).lte(::lumen_orm::Value::from(v))
         }
         /// More than `v`.
-        pub fn gt(v: ::lumen_orm::chrono::NaiveDateTime) -> ::lumen_orm::Filter {
+        pub fn gt(v: ::lumen_orm::time::PrimitiveDateTime) -> ::lumen_orm::Filter {
             ::lumen_orm::col(COLUMN).gt(::lumen_orm::Value::from(v))
         }
         /// At least `v`.
-        pub fn gte(v: ::lumen_orm::chrono::NaiveDateTime) -> ::lumen_orm::Filter {
+        pub fn gte(v: ::lumen_orm::time::PrimitiveDateTime) -> ::lumen_orm::Filter {
             ::lumen_orm::col(COLUMN).gte(::lumen_orm::Value::from(v))
         }
         /// Smallest first.
@@ -524,8 +526,8 @@ pub mod user {
         pub email: String,
         pub name: Option<String>,
         pub role: Option<super::Role>,
-        pub created_at: Option<::lumen_orm::chrono::NaiveDateTime>,
-        pub updated_at: Option<::lumen_orm::chrono::NaiveDateTime>,
+        pub created_at: Option<::lumen_orm::time::PrimitiveDateTime>,
+        pub updated_at: Option<::lumen_orm::time::PrimitiveDateTime>,
     }
     impl Create {
         fn row(self) -> (Vec<String>, Vec<::lumen_orm::Value>) {
@@ -554,11 +556,7 @@ pub mod user {
                 .push(
                     match self.updated_at {
                         Some(v) => ::lumen_orm::Value::from(v),
-                        None => {
-                            ::lumen_orm::Value::from(
-                                ::lumen_orm::chrono::Utc::now().naive_utc(),
-                            )
-                        }
+                        None => ::lumen_orm::Value::timestamp_now(),
                     },
                 );
             (columns, values)
@@ -571,8 +569,8 @@ pub mod user {
         pub email: ::lumen_orm::Set<String>,
         pub name: ::lumen_orm::Set<Option<String>>,
         pub role: ::lumen_orm::Set<super::Role>,
-        pub created_at: ::lumen_orm::Set<::lumen_orm::chrono::NaiveDateTime>,
-        pub updated_at: ::lumen_orm::Set<::lumen_orm::chrono::NaiveDateTime>,
+        pub created_at: ::lumen_orm::Set<::lumen_orm::time::PrimitiveDateTime>,
+        pub updated_at: ::lumen_orm::Set<::lumen_orm::time::PrimitiveDateTime>,
     }
     impl Update {
         fn set(self) -> Vec<(String, ::lumen_orm::Value)> {
@@ -596,11 +594,7 @@ pub mod user {
                 "updated_at".to_owned(),
                 match self.updated_at {
                     ::lumen_orm::Set::To(v) => ::lumen_orm::Value::from(v),
-                    ::lumen_orm::Set::NotSet => {
-                        ::lumen_orm::Value::from(
-                            ::lumen_orm::chrono::Utc::now().naive_utc(),
-                        )
-                    }
+                    ::lumen_orm::Set::NotSet => ::lumen_orm::Value::timestamp_now(),
                 },
             ));
             set

@@ -6,6 +6,25 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Changed
+
+- **Breaking:** dates are `time` types by default. A generated client now uses
+  `time::PrimitiveDateTime` for `DateTime` (`OffsetDateTime` with `@db.Timestamptz`), and
+  lumen-orm re-exports `time` instead of `chrono`. To keep `chrono` types, enable lumen-orm's
+  `chrono` feature and add `dateTimeType = "chrono"` to the lumen generator block, then run
+  `lumen generate` again. The values sent to and read from the database are the same either way.
+- **Breaking:** `Value::DateTime` and `Value::Timestamp` hold microseconds since the Unix epoch
+  instead of `chrono` values. `Value::from` still takes `time` and `chrono` dates, so code that
+  builds values with `.into()` keeps working.
+- With default features nothing depends on `chrono` any more, so the advisory ignore for it
+  (RUSTSEC-2026-0543) is gone from `deny.toml`.
+- `lumen_schema::checked::Relation` has two new fields, `b_fields` and `b_references`, for the
+  second id list of a MongoDB many-to-many, and `lumen_orm::Link` a new `IdList` variant. Code
+  that builds a `Relation` by hand or matches `Link` exhaustively needs to add them.
+- CI tests against Postgres 13, 14, 15, 16 and 17, and runs the Postgres tests on macOS and
+  Windows too.
+- The parser, checker, formatter and migrations are tested against a corpus of 68 real schemas.
+
 ### Added
 
 - Many-to-many relations on MongoDB, kept as a list of ids on both sides
@@ -17,6 +36,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   index it broke (`@map`'d names come back as the schema names, `_id` as the id field) and puts the
   index name in `err.constraint`, as Postgres does. The generated client sets this up; with
   `lumen-orm` alone, pass the names to `MongoDb::with_constraints`.
+- `@db.Date` and `@db.Time` fields get date and time-of-day types (`time::Date`, `time::Time`,
+  or `NaiveDate`, `NaiveTime` with `chrono`) instead of a timestamp that could not be read back.
+- `in` and `not in` filters accept lists of dates.
 
 ### Fixed
 
@@ -39,16 +61,6 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   longer get the same name.
 - Models with `@@ignore` keep their tables in migrations. The flag only leaves them out of the
   generated client.
-
-### Changed
-
-- `lumen_schema::checked::Relation` has two new fields, `b_fields` and `b_references`, for the
-  second id list of a MongoDB many-to-many, and `lumen_orm::Link` a new `IdList` variant. Code
-  that builds a `Relation` by hand or matches `Link` exhaustively needs to add them.
-
-- CI tests against Postgres 13, 14, 15, 16 and 17, and runs the Postgres tests on macOS and
-  Windows too.
-- The parser, checker, formatter and migrations are tested against a corpus of 68 real schemas.
 
 ## [0.1.1] - 2026-11-17
 

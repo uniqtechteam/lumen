@@ -270,8 +270,10 @@ fn mongo_client(schema: &Schema, models: &[ModelId]) -> TokenStream {
 /// the file's header.
 ///
 /// # Errors
-/// When the generated code does not parse (a bug in lumen; please report it).
+/// When the generator's `dateTimeType` is not `time` or `chrono`, or the generated code does not
+/// parse (a bug in lumen; please report it).
 pub fn generate(schema: &Schema, source: &str) -> Result<String, String> {
+    types::dates(schema)?;
     let models: Vec<ModelId> = schema
         .models
         .iter()

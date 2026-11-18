@@ -14,20 +14,26 @@ categories.workspace = true
 include = ["src/**/*", "LICENSE-*"]
 
 [features]
+default = ["time"]
+## Dates as `time` types: `OffsetDateTime`, `PrimitiveDateTime`, `Date`, `Time` (on by default).
+time = ["dep:time", "sqlx/time"]
+## Dates as `chrono` types, for clients generated with `dateTimeType = "chrono"`.
+chrono = ["dep:chrono", "sqlx/chrono"]
 ## MongoDB support (`lumen_orm::mongo`).
 mongodb = ["dep:mongodb"]
 
 [dependencies]
 mongodb = { workspace = true, optional = true }
-chrono.workspace = true
+chrono = { workspace = true, optional = true }
 rust_decimal.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sqlx.workspace = true
+time = { workspace = true, optional = true }
 uuid.workspace = true
 
 [dev-dependencies]
-lumen-orm = { path = ".", features = ["mongodb"] }
+lumen-orm = { path = ".", default-features = false, features = ["mongodb"] }
 mongodb.workspace = true
 tokio.workspace = true
 
