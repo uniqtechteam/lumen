@@ -74,6 +74,8 @@ pub struct Block {
     pub tail: String,
     /// Its top-level place in the file, when it was there.
     pub old: Option<usize>,
+    /// The comments around the file's `@@` attributes the pull writes again (`map`, `schema`).
+    rewritten: Vec<(String, Around)>,
 }
 
 impl Block {
@@ -88,14 +90,32 @@ impl Block {
             above: String::new(),
             tail: String::new(),
             old: None,
+            rewritten: Vec::new(),
         }
     }
 
+    /// `@@map(db)` when the name differs from the database's, or the file wrote it anyway.
+    fn map(&mut self, db: &str) {
+        if self.name != db || self.rewritten.iter().any(|(k, _)| k == "map") {
+            self.attribute(format!("@@map({})", super::types::string(db)));
+        }
+    }
+
+    /// A `@@` attribute the pull writes; it takes the comments of the file's one of that kind.
     fn attribute(&mut self, text: String) {
-        self.attributes.push(BlockAttribute {
-            text,
-            around: Around::default(),
-        });
+        let kind = text
+            .trim_start_matches('@')
+            .split('(')
+            .next()
+            .unwrap_or_default()
+            .to_owned();
+        let around = self
+            .rewritten
+            .iter()
+            .position(|(k, _)| *k == kind)
+            .map(|i| self.rewritten.remove(i).1)
+            .unwrap_or_default();
+        self.attributes.push(BlockAttribute { text, around });
     }
 
     /// The `@@` attributes of the file's block that the database cannot know, kept as written;
@@ -108,7 +128,10 @@ impl Block {
         skip: &[&str],
     ) {
         for (attr, around) in attributes.iter().zip(around) {
-            if !skip.contains(&attr.name.name.as_str()) {
+            if skip.contains(&attr.name.name.as_str()) {
+                self.rewritten
+                    .push((attr.name.name.clone(), around.clone()));
+            } else {
                 self.attributes.push(BlockAttribute {
                     text: x.source(attr.span).to_owned(),
                     around: around.clone(),
@@ -382,6 +405,15 @@ pub fn build(
         blocks.push(b.view(v, &name, *o));
     }
     blocks.extend(enums);
+    // new blocks by name within models, views and enums; the file's stay where they are
+    let rank = |k: &str| ["model", "view", "enum"].iter().position(|x| *x == k);
+    blocks.sort_by(|a, b| {
+        (a.old.is_some(), rank(a.keyword), &a.name).cmp(&(
+            b.old.is_some(),
+            rank(b.keyword),
+            &b.name,
+        ))
+    });
     for block in &mut blocks {
         arrange(block);
     }

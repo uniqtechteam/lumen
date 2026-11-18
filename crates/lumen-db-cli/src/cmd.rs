@@ -629,7 +629,9 @@ pub async fn db_pull(given: Option<&Path>, print: bool, force: bool) -> Result<E
         started.elapsed().as_millis()
     );
     if !pulled.notes.is_empty() {
-        eprintln!("notes (also written into the schema as `// lumen:` comments):");
+        eprintln!(
+            "notes (what the schema cannot say is also written into it as `// lumen:` comments):"
+        );
         for n in &pulled.notes {
             eprintln!("  - {n}");
         }

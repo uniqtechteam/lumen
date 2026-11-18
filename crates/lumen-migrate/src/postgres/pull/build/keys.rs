@@ -242,9 +242,7 @@ impl Builder<'_> {
             );
             block.reports.push(note);
         }
-        if block.name != table.name {
-            block.attribute(format!("@@map({})", types::string(&table.name)));
-        }
+        block.map(&table.name);
         if self.multi_schema {
             block.attribute(format!("@@schema({})", types::string(&table.schema)));
         }

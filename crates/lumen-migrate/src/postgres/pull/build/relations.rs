@@ -61,6 +61,12 @@ impl OldRelation<'_> {
             .collect()
     }
 
+    fn ty(&self, (model, field): (usize, usize)) -> String {
+        let f = &self.x.block(model).fields[field];
+        f.ty.as_ref()
+            .map_or_else(String::new, |t| self.x.source(t.span).to_owned())
+    }
+
     fn relation_attribute(&self) -> Option<String> {
         let (model, field) = self.holder;
         self.x.block(model).fields[field]
@@ -131,11 +137,8 @@ impl<'a> Builder<'a> {
         let holder = self.models[fk.holder].name.clone();
         if let Some(o) = old {
             let field = o.field(o.holder);
-            let relation = if o.named {
-                Some(o.name.to_owned())
-            } else {
-                needs_name.then(|| format!("{holder}{}", upper_first(&field)))
-            };
+            // the file paired them already; its choice of naming stays
+            let relation = o.named.then(|| o.name.to_owned());
             return Names {
                 field,
                 back: o.field(o.back),
@@ -223,7 +226,7 @@ impl<'a> Builder<'a> {
                 == Some(&fk.key)
         });
         let kept = old
-            .filter(|o| same_key && (o.named || !needs_name))
+            .filter(|_| same_key)
             .and_then(|o| o.relation_attribute());
         let relation = kept.unwrap_or_else(|| self.relation_attribute(fk, names.relation.as_ref()));
         let ty = if fk.optional {
@@ -248,6 +251,10 @@ impl<'a> Builder<'a> {
             false,
         );
         if let Some(o) = old {
+            // the file's arity stays: a one-to-many on a unique column, an optional relation
+            // over a required column
+            field.ty = o.ty(o.holder);
+            back.ty = o.ty(o.back);
             field.attributes.extend(o.kept(o.holder));
             field.around = o.around(o.holder);
             field.old = Some(o.holder.1);

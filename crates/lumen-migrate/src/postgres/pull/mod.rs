@@ -183,7 +183,12 @@ pub fn pull(db: &Database, file: &SourceFile, force: bool) -> Result<Pulled, Mig
             "view" => counts.1 += 1,
             _ => counts.2 += 1,
         }
-        notes.extend(b.notes.iter().chain(&b.reports).map(|n| format!("{}: {n}", b.name)));
+        notes.extend(
+            b.notes
+                .iter()
+                .chain(&b.reports)
+                .map(|n| format!("{}: {n}", b.name)),
+        );
         parts.push((
             b.old.unwrap_or(usize::MAX - built.blocks.len() + k),
             render::block(b),

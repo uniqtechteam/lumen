@@ -97,9 +97,7 @@ impl Builder<'_> {
                 values.push((db_value.clone(), line.name.clone()));
                 block.lines.push(line);
             }
-            if name != e.name {
-                block.attribute(format!("@@map({})", types::string(&e.name)));
-            }
+            block.map(&e.name);
             self.schema_attribute(&mut block, &e.schema);
             self.enums.push(PulledEnum {
                 name,
@@ -154,8 +152,14 @@ impl Builder<'_> {
             .as_ref()
             .and_then(|d| types::default(&kind, d, &values));
         let mut kept = Vec::new();
+        let mut map =
+            (name != column.name).then(|| format!("@map({})", types::string(&column.name)));
         if let Some((x, i, f)) = old {
             let ast = &x.block(i).fields[f];
+            // an `@map` the file writes although the names agree stays
+            if let Some(a) = ast.attributes.iter().find(|a| a.name.name == "map") {
+                map = Some(x.source(a.span).to_owned());
+            }
             let was = x.table(i).and_then(|t| t.column(&column.name));
             if was.is_some_and(|c| c.ty == column.ty && c.nullable == column.nullable)
                 && let Some(t) = &ast.ty
@@ -178,9 +182,7 @@ impl Builder<'_> {
             kept.extend(kept_attributes(x, ast));
         }
         let mut attributes: Vec<String> = default.into_iter().collect();
-        if name != column.name {
-            attributes.push(format!("@map({})", types::string(&column.name)));
-        }
+        attributes.extend(map);
         attributes.extend(native);
         attributes.extend(kept);
         (Line::new(name, ty, attributes, true), kind)
@@ -281,20 +283,17 @@ impl Builder<'_> {
                     line.attributes = ast
                         .attributes
                         .iter()
-                        .filter(|a| a.name.name != "map")
                         .map(|a| x.source(a.span).to_owned())
                         .collect();
                 }
             }
-            if field != *column {
+            if field != *column && !line.attributes.iter().any(|a| a.starts_with("@map(")) {
                 line.attributes
                     .push(format!("@map({})", types::string(column)));
             }
             block.lines.push(line);
         }
-        if name != v.name {
-            block.attribute(format!("@@map({})", types::string(&v.name)));
-        }
+        block.map(&v.name);
         self.schema_attribute(&mut block, &v.schema);
         block
     }

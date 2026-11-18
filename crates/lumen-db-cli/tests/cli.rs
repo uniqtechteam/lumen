@@ -332,3 +332,81 @@ async fn ac_007_postgres_resolve_a_failed_migration() {
         stderr(&warned)
     );
 }
+
+const ODD_DATABASE: &str = include_str!("odd_database.sql");
+
+/// SPEC-CLI-001 AC-004: a database written by hand pulls to a schema that validates, is
+/// formatted and generates a client, and whose only drift is what the notes name.
+#[tokio::test]
+async fn ac_008_postgres_db_pull_reads_a_hand_written_database() {
+    let Some(url) = fresh_postgres("pull").await else {
+        eprintln!("skipped: LUMEN_TEST_POSTGRES_URL is not set");
+        return;
+    };
+    let pool = PgPool::connect(&url).await.unwrap();
+    sqlx::raw_sql(ODD_DATABASE).execute(&pool).await.unwrap();
+    pool.close().await;
+    let dir = tempfile::tempdir().unwrap();
+    let d = dir.path();
+    ok(d, &["init", "--url", &url]);
+    let pulled = ok(d, &["db", "pull"]);
+    let report = stderr(&pulled);
+    let schema = std::fs::read_to_string(d.join("prisma/schema.prisma")).unwrap();
+    for line in [
+        "model CustomerAccounts {",
+        "  id BigInt @id @default(autoincrement())",
+        "  eMail String @unique @map(\"E-mail\") @db.VarChar(320)",
+        "  search Unsupported(\"tsvector\")?",
+        "  f1stSeen DateTime? @map(\"1st_seen\") @db.Date",
+        "  customerAccounts CustomerAccounts? @relation(\"CustomerAccountsCustomerAccounts\", fields: [referredBy]",
+        "  customerAccountsAsCustomerAccounts CustomerAccounts[] @relation(\"CustomerAccountsCustomerAccounts\")",
+        "  ordersAsBuyer Orders[] @relation(\"OrdersBuyer\")",
+        "  orderLines OrderLines @relation(fields: [orderId, lineNo], references: [orderId, lineNo], onDelete: NoAction, onUpdate: NoAction, map: \"shipment_line\")",
+        "  @@map(\"customer accounts\")",
+        "  status OrderStatus @default(in_progress)",
+        "  @@index([placedAt(sort: Desc)], map: \"orders_live\", where: raw(\"deleted_at IS NULL\"))",
+        "  @@index([status], map: \"orders_status_hash\", type: Hash)",
+        "  @@id([orderId, lineNo])",
+        "  tags Tag[]",
+        "  orders Orders[]",
+        "model StringModel {",
+        "  @@ignore",
+        "view OrderTotals {",
+        "  in_progress @map(\"in-progress\")",
+        "  v2nd_try @map(\"2nd-try\")",
+        "// lumen: the check constraint `total_not_negative`",
+        "// lumen: the index `customer_email_lower` is on an expression",
+    ] {
+        let found = schema.lines().any(|l| {
+            let squeeze = |s: &str| s.split_whitespace().collect::<Vec<_>>().join(" ");
+            squeeze(l).starts_with(&squeeze(line))
+        });
+        assert!(found, "missing `{line}` in:\n{schema}\n{report}");
+    }
+    // the drift is exactly what the notes name: the expression index and the NOT NULL list
+    assert!(
+        report.contains("DROP INDEX \"customer_email_lower\""),
+        "{report}"
+    );
+    assert!(
+        report.contains("ALTER COLUMN \"tags\" DROP NOT NULL"),
+        "{report}"
+    );
+    let drift: Vec<&str> = report
+        .lines()
+        .skip_while(|l| !l.contains("would still change"))
+        .skip(1)
+        .take_while(|l| l.starts_with("  "))
+        .collect();
+    assert_eq!(drift.len(), 2, "{report}");
+    ok(d, &["validate"]);
+    ok(d, &["format", "--check"]);
+    ok(d, &["generate"]);
+    assert!(d.join("src/db.rs").exists());
+    // a second pull changes nothing
+    ok(d, &["db", "pull"]);
+    assert_eq!(
+        std::fs::read_to_string(d.join("prisma/schema.prisma")).unwrap(),
+        schema
+    );
+}
