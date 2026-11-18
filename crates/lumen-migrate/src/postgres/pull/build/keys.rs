@@ -240,7 +240,7 @@ impl Builder<'_> {
                 "`{}` has no primary key or unique key on required columns, so the client leaves it out (`@@ignore`)",
                 block.name
             );
-            block.notes.push(note);
+            block.reports.push(note);
         }
         if block.name != table.name {
             block.attribute(format!("@@map({})", types::string(&table.name)));

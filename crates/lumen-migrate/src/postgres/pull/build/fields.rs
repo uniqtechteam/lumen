@@ -220,14 +220,14 @@ impl Builder<'_> {
                 line.around = around[f].clone();
                 line.old = Some(f);
             }
-            let notes = &mut self.models[m].block.notes;
+            let block = &mut self.models[m].block;
             if let Kind::Unsupported(raw) = &kind.kind {
-                notes.push(format!(
+                block.reports.push(format!(
                     "`{name}` has the type `{raw}`, which the client cannot read (Unsupported)"
                 ));
             }
             if kind.list && !column.nullable {
-                notes.push(format!(
+                block.notes.push(format!(
                     "`{name}` is NOT NULL, which a list field cannot say, so `lumen migrate dev` would drop the constraint"
                 ));
             }

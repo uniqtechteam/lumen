@@ -64,8 +64,10 @@ pub struct Block {
     pub lines: Vec<Line>,
     /// `@@` attributes.
     pub attributes: Vec<BlockAttribute>,
-    /// lumen's notes about what the schema cannot say.
+    /// lumen's notes about what the schema cannot say, written above the block.
     pub notes: Vec<String>,
+    /// Things worth saying that the block shows already (`Unsupported`, `@@ignore`); printed only.
+    pub reports: Vec<String>,
     /// The comments above the block in the file.
     pub above: String,
     /// The comments before its `}` in the file.
@@ -82,6 +84,7 @@ impl Block {
             lines: Vec::new(),
             attributes: Vec::new(),
             notes: Vec::new(),
+            reports: Vec::new(),
             above: String::new(),
             tail: String::new(),
             old: None,
