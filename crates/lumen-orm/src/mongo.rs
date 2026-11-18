@@ -1003,10 +1003,9 @@ mod tests {
             doc! { "name": "$gt" },
             "a string is never an operator"
         );
-        let e = query_of(&col("$where").equals("sleep(1000)")).unwrap_err();
-        assert_eq!(e.code, "P2009");
-        let e = query_of(&!col("$expr").is_null()).unwrap_err();
-        assert_eq!(e.code, "P2009");
+        let code = |f| query_of(&f).err().map(|e| e.code);
+        assert_eq!(code(col("$where").equals("sleep(1000)")), Some("P2009"));
+        assert_eq!(code(!col("$expr").is_null()), Some("P2009"));
     }
 
     #[test]
