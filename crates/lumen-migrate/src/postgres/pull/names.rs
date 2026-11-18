@@ -1,4 +1,4 @@
-//! Names for what `db pull` reads (SPEC-CLI-001 FR-005, ADR-011): PascalCase models and enums,
+//! Names for what `db pull` reads (SPEC-CLI-001 FR-005, ADR-011): `PascalCase` models and enums,
 //! camelCase fields, cleaned enum values, and a number when a name is taken.
 
 use std::collections::HashSet;
@@ -82,7 +82,7 @@ pub fn field_name(db: &str) -> String {
 }
 
 /// NR-1: an enum value is kept when it is a valid name, else cleaned: `in-progress` →
-/// `in_progress`, `1` → `v1`, `` → `v`.
+/// `in_progress`, `1` → `v1`, an empty value → `v`.
 #[must_use]
 pub fn value_name(db: &str) -> String {
     if is_valid(db) {

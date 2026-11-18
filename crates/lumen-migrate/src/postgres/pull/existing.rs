@@ -26,6 +26,10 @@ pub struct Existing<'a> {
     enums: Vec<(&'a ast::Enum, usize)>,
 }
 
+fn schema_of(schema: Option<&String>) -> String {
+    schema.cloned().unwrap_or_else(|| "public".to_owned())
+}
+
 /// The start of the line `pos` is on.
 fn line_start(text: &str, pos: usize) -> usize {
     text[..pos].rfind('\n').map_or(0, |i| i + 1)
@@ -45,11 +49,9 @@ fn comments(slice: &str, indent: usize) -> String {
         .lines()
         .map(str::trim_end)
         .filter(|l| {
-            let t = l.trim_start();
-            !(t.starts_with("// lumen:")
-                && !t["// lumen:".len()..]
-                    .trim_start()
-                    .starts_with("renamed from"))
+            l.trim_start()
+                .strip_prefix("// lumen:")
+                .is_none_or(|rest| rest.trim_start().starts_with("renamed from"))
         })
         .collect();
     let first = lines.iter().position(|l| !l.trim().is_empty());
@@ -125,10 +127,6 @@ impl<'a> Existing<'a> {
         }
     }
 
-    fn schema_of(&self, schema: Option<&String>) -> String {
-        schema.cloned().unwrap_or_else(|| "public".to_owned())
-    }
-
     /// The model (or view, when `view`) for the table `schema.name`.
     #[must_use]
     pub fn model(&self, schema: &str, name: &str, view: bool) -> Option<usize> {
@@ -138,7 +136,7 @@ impl<'a> Existing<'a> {
         self.schema.models.iter().position(|m| {
             (m.kind == ModelKind::View) == view
                 && m.database_name() == name
-                && self.schema_of(m.schema.as_ref()) == schema
+                && schema_of(m.schema.as_ref()) == schema
         })
     }
 
@@ -150,7 +148,7 @@ impl<'a> Existing<'a> {
         }
         self.schema.enums.iter().position(|e| {
             e.mapped_name.as_deref().unwrap_or(&e.name) == name
-                && self.schema_of(e.schema.as_ref()) == schema
+                && schema_of(e.schema.as_ref()) == schema
         })
     }
 
@@ -189,7 +187,7 @@ impl<'a> Existing<'a> {
     pub fn table(&self, i: usize) -> Option<&Table> {
         let m = &self.schema.models[i];
         self.shape
-            .table(&self.schema_of(m.schema.as_ref()), m.database_name())
+            .table(&schema_of(m.schema.as_ref()), m.database_name())
     }
 
     /// The scalar field of model `i` stored in `column`.
@@ -260,7 +258,7 @@ impl<'a> Existing<'a> {
     /// The comments around each line of a block (fields or values, then `@@` attributes, by
     /// the start of their spans), and the comments just before its `}`.
     #[must_use]
-    pub fn around(&self, header: Span, items: &[Span], block: Span) -> (Vec<Around>, String) {
+    fn around(&self, header: Span, items: &[Span], block: Span) -> (Vec<Around>, String) {
         let mut order: Vec<usize> = (0..items.len()).collect();
         order.sort_by_key(|&i| items[i].start);
         let mut out = vec![Around::default(); items.len()];
@@ -285,7 +283,7 @@ impl<'a> Existing<'a> {
                 .map_or(self.text.len(), |p| end + p);
             let trailing = self.text[end..line_end].trim();
             if trailing.starts_with("//") {
-                out[i].trailing = trailing.to_owned();
+                trailing.clone_into(&mut out[i].trailing);
             }
             from = next_line(self.text, end);
         }
@@ -296,6 +294,26 @@ impl<'a> Existing<'a> {
             String::new()
         };
         (out, tail)
+    }
+
+    /// The comments around each field and `@@` attribute of model `i` (fields first), and
+    /// before its `}`.
+    #[must_use]
+    pub fn model_around(&self, i: usize) -> (Vec<Around>, String) {
+        let ast = self.block(i);
+        let mut spans: Vec<Span> = ast.fields.iter().map(|f| f.span).collect();
+        spans.extend(ast.attributes.iter().map(|a| a.span));
+        self.around(ast.name.span, &spans, ast.span)
+    }
+
+    /// The comments around each value and `@@` attribute of enum `i` (values first), and
+    /// before its `}`.
+    #[must_use]
+    pub fn enum_around(&self, i: usize) -> (Vec<Around>, String) {
+        let ast = self.enum_block(i);
+        let mut spans: Vec<Span> = ast.values.iter().map(|v| v.span).collect();
+        spans.extend(ast.attributes.iter().map(|a| a.span));
+        self.around(ast.name.span, &spans, ast.span)
     }
 
     /// The relation whose foreign key is on model `holder` in `columns`, pointing at `target`.

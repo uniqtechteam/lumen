@@ -39,6 +39,10 @@ fn args(ty: &str) -> Vec<u32> {
         .unwrap_or_default()
 }
 
+#[expect(
+    clippy::unnecessary_wraps,
+    reason = "reads as the `Option` the scalar's native type is"
+)]
 fn native(name: &str, args: Vec<u32>) -> Option<NativeType> {
     Some(NativeType {
         name: name.to_owned(),
@@ -74,8 +78,7 @@ fn scalar_guess(ty: &str) -> Option<(ScalarType, Option<NativeType>)> {
         "boolean" => (S::Boolean, None),
         "timestamp" if a == [3] && !with_zone => (S::DateTime, None),
         "timestamp" if with_zone => (S::DateTime, native("Timestamptz", a)),
-        "timestamp" => (S::DateTime, native("Timestamp", a)),
-        "timestamp without time zone" => (S::DateTime, native("Timestamp", a)),
+        "timestamp" | "timestamp without time zone" => (S::DateTime, native("Timestamp", a)),
         "timestamp with time zone" => (S::DateTime, native("Timestamptz", a)),
         "date" => (S::DateTime, native("Date", a)),
         "time" if with_zone => (S::DateTime, native("Timetz", a)),

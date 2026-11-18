@@ -11,6 +11,8 @@ mod names;
 mod render;
 mod types;
 
+use std::fmt::Write as _;
+
 use lumen_schema::ast::Top;
 use lumen_schema::{SourceFile, check, parse};
 use sqlx::{PgPool, Row};
@@ -193,7 +195,7 @@ pub fn pull(db: &Database, file: &SourceFile, force: bool) -> Result<Pulled, Mig
         .collect::<Vec<_>>()
         .join("\n");
     for c in &ast.trailing_comments {
-        text.push_str(&format!("\n// {c}\n"));
+        let _ = write!(text, "\n// {c}\n");
     }
     let new = SourceFile::new(file.name.clone(), text);
     let (formatted, _) = lumen_schema::format(&new);
