@@ -6,6 +6,27 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Added
+
+- `lumen db pull` reads a Postgres database: tables, views, enums, keys, indexes, foreign keys as
+  relations on both sides, and `_AToB` join tables as many-to-many relations. Names become
+  `PascalCase` models and camelCase fields with `@map` for the database's names. Pulling again
+  keeps your names, the order of blocks and fields, comments and attributes the database cannot
+  know; `--force` starts over. The new schema is checked before it is written, and what
+  `lumen migrate dev` would still change (an expression index, for example) is printed.
+- `lumen generate --watch` writes the client again each time the schema file is saved, one line
+  per run, and keeps watching when the schema has errors.
+- Partial indexes: `@@index([..], where: raw("deleted_at IS NULL"))`, and `where: { archived: false }`
+  for simple conditions, create the index with its `WHERE`, and migrations compare it.
+
+### Fixed
+
+- Migrations read the `WHERE` of a partial index, so a partial unique index no longer looks like a
+  plain one, and an index with `INCLUDE` columns or an expression key is no longer read as a
+  different index.
+- `@default(dbgenerated("'..'"))` with a literal now settles: a second `migrate dev` finds nothing
+  to change.
+
 ## [0.2.0] - 2026-11-18
 
 ### Changed

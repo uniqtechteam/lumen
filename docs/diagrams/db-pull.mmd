@@ -1,0 +1,9 @@
+flowchart LR
+    DB[(Postgres)] --> D[Database::read<br/>describe, views, checks]
+    F[schema.prisma<br/>as it is now] --> E[Existing<br/>names, order, comments]
+    D --> B[build<br/>fields, keys, relations]
+    E --> B
+    B --> R[render + format]
+    R --> C{check and calculate}
+    C --> W[schema.prisma]
+    C --> N[notes and drift<br/>printed]
