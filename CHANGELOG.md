@@ -45,6 +45,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - `migrate dev` creates a missing database on Windows too. There the server can close the
   connection before the client reads "database does not exist", which showed up as "an existing
   connection was forcibly closed".
+- `Db::transaction` and `Db::transaction_with` can be used inside a web handler or
+  `tokio::spawn`. Frameworks check that a handler's future is `Send` in a generic way, and there
+  a transaction failed to compile with "implementation of `AsyncFnOnce` is not general enough".
+  The closure now takes `&mut Tx<'_>` for any lifetime, so closures written as before keep
+  working.
 - A `///` comment at the end of a field line no longer stops the schema from parsing. It joins
   the field's documentation.
 - `@@index(email)`, `@@unique(email)` and `@relation(fields: authorId, references: id)` are
