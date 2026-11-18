@@ -27,6 +27,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Added
 
+- A README section on running in production: `migrate deploy` and its lock, failed migrations,
+  `CREATE INDEX CONCURRENTLY`, lock timeouts, pool settings, statement timeouts, retrying P2034,
+  and replica sets on MongoDB.
 - Many-to-many relations on MongoDB, kept as a list of ids on both sides
   (`labelIds String[] @db.ObjectId` with `@relation(fields: [labelIds], references: [id])`).
   `some`, `every` and `none` work on them in the generated client and through
@@ -59,6 +62,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   A server that cannot be reached is P1001 (503).
 - A transaction on a single MongoDB server (not a replica set) says that transactions need a
   replica set, instead of passing on the server's advice to add `retryWrites=false`.
+- `lumen migrate deploy` warns about applied migrations whose file changed or is gone. Before, it
+  said nothing and only `migrate status` noticed.
 - A `///` comment at the end of a field line no longer stops the schema from parsing. It joins
   the field's documentation.
 - `@@index(email)`, `@@unique(email)` and `@relation(fields: authorId, references: id)` are

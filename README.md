@@ -355,6 +355,54 @@ lumen migrate deploy     # apply pending migrations; safe for production
 Without a terminal, a command that would lose data stops and asks you to pass
 `--accept-data-loss`, so a script can't drop a column by accident.
 
+## In production
+
+- Run `lumen migrate deploy` once per release, from the release job or before the new version
+  starts, with a database user that may change the schema. It never asks anything, applies only
+  the pending migration files in order, and never drops anything a migration file does not drop.
+  It holds a Postgres advisory lock while it works, so two instances deploying at the same moment
+  take turns and the second finds nothing left to do. It also warns about applied migrations whose
+  file changed or is gone.
+- Each migration file runs as one implicit transaction: if a statement fails, the whole file is
+  undone and the migration is recorded as failed. The next deploy stops until you run
+  `lumen migrate resolve --rolled-back <name>` (after fixing the file) or `--applied <name>`.
+  A statement that cannot run in a transaction, such as `CREATE INDEX CONCURRENTLY`, has to be
+  alone in its own migration file.
+- Take a backup or snapshot before a deploy that changes existing tables. An `ALTER TABLE` waits
+  for every open transaction on that table and blocks new ones while it waits, so put
+  `SET lock_timeout = '5s';` at the top of a migration that touches a busy table, and run it
+  again later if it times out.
+- `Client::connect(url)` uses the driver's pool defaults: on Postgres 10 connections, 30 seconds
+  to wait for a free one, idle connections closed after 10 minutes, and each one replaced after
+  30 minutes. Broken connections are dropped and replaced, so the client recovers on its own when
+  the database restarts. To choose the sizes, build the pool yourself:
+
+  ```rust
+  use lumen_orm::sqlx::postgres::PgPoolOptions;
+  use std::time::Duration;
+
+  let pool = PgPoolOptions::new()
+      .max_connections(20)
+      .acquire_timeout(Duration::from_secs(5))
+      .connect(&std::env::var("DATABASE_URL")?)
+      .await?;
+  let client = db::Client::new(lumen_orm::Db::from_pool(pool));
+  ```
+
+  A request that waits longer than `acquire_timeout` for a connection fails with P1001 (HTTP
+  503). A per-statement limit goes in the URL:
+  `postgresql://..?options=-c%20statement_timeout%3D10000` (milliseconds).
+- A serializable or repeatable-read transaction that conflicts, and a deadlock, fail with P2034
+  (`err.http_status()` is 409), as does a write conflict between MongoDB transactions. Run the whole transaction again when you get it; lumen does not
+  retry on its own, because only you know whether the work in it can be repeated.
+- A transaction whose future is dropped (a timeout, a client that went away) is rolled back
+  before its connection is used again.
+- On MongoDB, transactions and nested writes need a replica set or a sharded cluster. A single
+  server can be started as a one-member replica set (`mongod --replSet rs0`, then
+  `rs.initiate()`). Pool sizes and timeouts go in the URL (`maxPoolSize`, `serverSelectionTimeoutMS`).
+- `find_many` without `take` reads every matching row into memory. Page large tables with `take`
+  and `skip`, or by a key: `filter(id::gt(last_id)).order_by(id::asc()).take(500)`.
+
 ## Limits
 
 - No SQLite, MySQL or SQL Server. Postgres and MongoDB only.
