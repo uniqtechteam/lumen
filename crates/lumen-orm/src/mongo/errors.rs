@@ -54,7 +54,11 @@ pub(super) fn mongo_err(e: &mongodb::error::Error) -> Error {
     ) {
         return Error::new("P1001", format!("cannot reach MongoDB: {message}"));
     }
-    if message.contains("Transaction numbers are only allowed") || message.contains("replica set") {
+    // a single server answers a transaction with "does not support retryable writes" (code 20)
+    if message.contains("Transaction numbers are only allowed")
+        || message.contains("replica set")
+        || message.contains("does not support retryable writes")
+    {
         return Error::new(
             "P2010",
             format!("MongoDB transactions need a replica set or a sharded cluster ({message})"),

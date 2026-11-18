@@ -57,6 +57,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - On MongoDB a write conflict between transactions, and any other error the driver labels
   `TransientTransactionError`, is P2034 ("try again", HTTP 409) as on Postgres, instead of P2010.
   A server that cannot be reached is P1001 (503).
+- A transaction on a single MongoDB server (not a replica set) says that transactions need a
+  replica set, instead of passing on the server's advice to add `retryWrites=false`.
 - A `///` comment at the end of a field line no longer stops the schema from parsing. It joins
   the field's documentation.
 - `@@index(email)`, `@@unique(email)` and `@relation(fields: authorId, references: id)` are
