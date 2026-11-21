@@ -85,7 +85,7 @@ fn is_ordered(f: &Field) -> bool {
 }
 
 /// `user::email::equals(..)` and friends, typed by the field.
-pub(crate) fn field_module(schema: &Schema, f: &Field) -> TokenStream {
+pub(crate) fn field_module(schema: &Schema, f: &Field, extra: &TokenStream) -> TokenStream {
     let module = ident(&snake(&f.name));
     let column = f.database_name();
     let Some(base) = base_type_at(schema, f, 2) else {
@@ -164,6 +164,7 @@ pub(crate) fn field_module(schema: &Schema, f: &Field) -> TokenStream {
             /// The column.
             pub const COLUMN: &str = #column;
             #(#fns)*
+            #extra
             /// Smallest first.
             pub fn asc() -> (String, ::lumen_orm::Order) { (COLUMN.to_owned(), ::lumen_orm::Order::Asc) }
             /// Largest first.
@@ -792,12 +793,13 @@ pub fn module(schema: &Schema, model_id: ModelId) -> TokenStream {
         .fields
         .iter()
         .filter(|f| !f.ignored && f.is_scalar_like())
-        .map(|f| field_module(schema, f));
+        .map(|f| field_module(schema, f, &crate::aggregate::field_fns(model, f)));
     let relations = crate::relation_filter::modules(schema, model_id, false);
     let create = create_input(schema, model);
     let update = update_input(schema, model);
     let unique = unique_where(schema, model);
     let actions = actions(model);
+    let aggregates = crate::aggregate::model_code(schema, model);
     let includes = includes(schema, model_id)
         .iter()
         .map(|i| include_code(schema, model, i))
@@ -825,6 +827,7 @@ pub fn module(schema: &Schema, model_id: ModelId) -> TokenStream {
             #update
             #unique
             #actions
+            #aggregates
             #(#includes)*
             #nested
         }

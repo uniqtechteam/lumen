@@ -32,9 +32,12 @@ pub mod nested;
 mod query;
 mod value;
 
+pub use aggregate::{
+    Agg, AggFn, AggModel, AggOrder, AggValue, Aggregate, AggregateQuery, GroupByQuery, Having,
+    read as read_aggregate,
+};
 #[cfg(feature = "time")]
 pub use dates::serde as time_serde;
-pub use aggregate::{Agg, AggFn, Aggregate, read as read_aggregate};
 pub use db::{Db, Isolation, Run, Tx};
 pub use error::{Error, ErrorInfo, Result};
 pub use filter::{Col, Filter, Link, Mode, Op, Quantifier, Related, col};

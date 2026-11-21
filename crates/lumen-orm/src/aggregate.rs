@@ -19,8 +19,11 @@
 //! an aggregate needs that aggregate in `values`.
 
 use std::fmt::Write as _;
+use std::marker::PhantomData;
 
-use crate::filter::Filter;
+use crate::db::Run;
+use crate::error::Result;
+use crate::filter::{Col, Filter, col};
 use crate::query::{Built, Order, Table, Writer, ident};
 use crate::value::Value;
 
@@ -267,12 +270,322 @@ impl Aggregate {
     }
 }
 
+/// A model that `aggregate()` and `group_by()` run on, implemented by the generated client: it
+/// names the result types, and tags values and conditions so they only fit their own model.
+pub trait AggModel {
+    /// One aggregate result.
+    type Aggregate: for<'r> sqlx::FromRow<'r, sqlx::postgres::PgRow> + Send + Unpin;
+    /// One group of a `group_by()`.
+    type Group: for<'r> sqlx::FromRow<'r, sqlx::postgres::PgRow> + Send + Unpin;
+}
+
+type Tag<M> = PhantomData<fn() -> M>;
+
+fn add(values: &mut Vec<Agg>, v: Agg) {
+    if !values.contains(&v) {
+        values.push(v);
+    }
+}
+
+/// An aggregate value of model `M`: `order::total::sum()`, `order::aggregates::count()`.
+pub struct AggValue<M>(pub Agg, Tag<M>);
+
+impl<M> AggValue<M> {
+    /// Tag `agg` as a value of `M`.
+    #[must_use]
+    pub fn new(agg: Agg) -> Self {
+        Self(agg, PhantomData)
+    }
+
+    fn compare(self, f: impl FnOnce(&Col) -> Filter) -> Having<M> {
+        let filter = f(&col(&self.0.alias()));
+        Having {
+            values: vec![self.0],
+            filter,
+            tag: PhantomData,
+        }
+    }
+
+    /// Groups where this value equals `v`.
+    pub fn equals(self, v: impl Into<Value>) -> Having<M> {
+        self.compare(|c| c.equals(v))
+    }
+
+    /// Groups where this value is less than `v`.
+    pub fn lt(self, v: impl Into<Value>) -> Having<M> {
+        self.compare(|c| c.lt(v))
+    }
+
+    /// Groups where this value is at most `v`.
+    pub fn lte(self, v: impl Into<Value>) -> Having<M> {
+        self.compare(|c| c.lte(v))
+    }
+
+    /// Groups where this value is more than `v`.
+    pub fn gt(self, v: impl Into<Value>) -> Having<M> {
+        self.compare(|c| c.gt(v))
+    }
+
+    /// Groups where this value is at least `v`.
+    pub fn gte(self, v: impl Into<Value>) -> Having<M> {
+        self.compare(|c| c.gte(v))
+    }
+
+    /// Groups with the smallest value first.
+    #[must_use]
+    pub fn asc(self) -> AggOrder<M> {
+        AggOrder(self.0, Order::Asc, PhantomData)
+    }
+
+    /// Groups with the largest value first.
+    #[must_use]
+    pub fn desc(self) -> AggOrder<M> {
+        AggOrder(self.0, Order::Desc, PhantomData)
+    }
+}
+
+impl<M> Clone for AggValue<M> {
+    fn clone(&self) -> Self {
+        Self::new(self.0.clone())
+    }
+}
+
+impl<M> std::fmt::Debug for AggValue<M> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+/// A condition on the groups of model `M`: on an aggregate value (`order::total::sum().gt(100)`),
+/// or on a group column through a plain filter (`order::status::equals(..)`).
+pub struct Having<M> {
+    values: Vec<Agg>,
+    filter: Filter,
+    tag: Tag<M>,
+}
+
+impl<M> From<Filter> for Having<M> {
+    fn from(filter: Filter) -> Self {
+        Self {
+            values: Vec::new(),
+            filter,
+            tag: PhantomData,
+        }
+    }
+}
+
+impl<M> Having<M> {
+    /// Both conditions.
+    #[must_use]
+    pub fn and(mut self, other: impl Into<Having<M>>) -> Self {
+        let other = other.into();
+        self.values.extend(other.values);
+        self.filter = self.filter.and(other.filter);
+        self
+    }
+
+    /// Either condition.
+    #[must_use]
+    pub fn or(mut self, other: impl Into<Having<M>>) -> Self {
+        let other = other.into();
+        self.values.extend(other.values);
+        self.filter = self.filter.or(other.filter);
+        self
+    }
+}
+
+/// Groups of model `M` ordered by an aggregate value: `order::total::sum().desc()`.
+pub struct AggOrder<M>(Agg, Order, Tag<M>);
+
+/// `aggregate()`: values over the records of `M` that match, in one statement.
+pub struct AggregateQuery<R, M> {
+    run: R,
+    query: Aggregate,
+    tag: Tag<M>,
+}
+
+impl<R: Run, M: AggModel> AggregateQuery<R, M> {
+    /// Over every record of `table`, run on `run`.
+    #[must_use]
+    pub fn new(run: R, table: Table) -> Self {
+        Self {
+            run,
+            query: Aggregate::from(table),
+            tag: PhantomData,
+        }
+    }
+
+    /// Only records matching `f` (combined with earlier filters by AND).
+    #[must_use]
+    pub fn filter(mut self, f: Filter) -> Self {
+        self.query.filter = Some(match self.query.filter.take() {
+            Some(e) => e.and(f),
+            None => f,
+        });
+        self
+    }
+
+    /// Compute `v`.
+    #[must_use]
+    pub fn value(mut self, v: AggValue<M>) -> Self {
+        add(&mut self.query.values, v.0);
+        self
+    }
+
+    /// Count the records.
+    #[must_use]
+    pub fn count(self) -> Self {
+        self.value(AggValue::new(Agg::count_all()))
+    }
+
+    /// Order the records before `take` and `skip` pick them.
+    #[must_use]
+    pub fn order_by(mut self, order: (String, Order)) -> Self {
+        self.query.order.push(order);
+        self
+    }
+
+    /// Aggregate at most `n` records.
+    #[must_use]
+    pub fn take(mut self, n: i64) -> Self {
+        self.query.limit = Some(n);
+        self
+    }
+
+    /// Skip the first `n` records.
+    #[must_use]
+    pub fn skip(mut self, n: i64) -> Self {
+        self.query.offset = Some(n);
+        self
+    }
+
+    /// The statement, for logging or running elsewhere.
+    #[must_use]
+    pub fn statement(&self) -> &Aggregate {
+        &self.query
+    }
+
+    /// Run it. Without any value asked for, it counts.
+    ///
+    /// # Errors
+    /// A coded error from the database.
+    pub async fn exec(mut self) -> Result<M::Aggregate> {
+        self.run.fetch_one(self.query.build()).await
+    }
+}
+
+/// `group_by()`: values per group of records of `M` sharing the `group_by` columns.
+pub struct GroupByQuery<R, M> {
+    run: R,
+    query: Aggregate,
+    tag: Tag<M>,
+}
+
+impl<R: Run, M: AggModel> GroupByQuery<R, M> {
+    /// Groups of `table` by `columns`, run on `run`.
+    #[must_use]
+    pub fn new<'a>(run: R, table: Table, columns: impl IntoIterator<Item = &'a str>) -> Self {
+        let mut query = Aggregate::from(table);
+        query.group_by = columns.into_iter().map(str::to_owned).collect();
+        Self {
+            run,
+            query,
+            tag: PhantomData,
+        }
+    }
+
+    /// Only records matching `f` (combined with earlier filters by AND).
+    #[must_use]
+    pub fn filter(mut self, f: Filter) -> Self {
+        self.query.filter = Some(match self.query.filter.take() {
+            Some(e) => e.and(f),
+            None => f,
+        });
+        self
+    }
+
+    /// Compute `v` for each group.
+    #[must_use]
+    pub fn value(mut self, v: AggValue<M>) -> Self {
+        add(&mut self.query.values, v.0);
+        self
+    }
+
+    /// Count the records of each group.
+    #[must_use]
+    pub fn count(self) -> Self {
+        self.value(AggValue::new(Agg::count_all()))
+    }
+
+    /// Only groups where `h` holds (combined with earlier conditions by AND). Values it names
+    /// are computed too.
+    #[must_use]
+    pub fn having(mut self, h: impl Into<Having<M>>) -> Self {
+        let h = h.into();
+        for v in h.values {
+            add(&mut self.query.values, v);
+        }
+        self.query.having = Some(match self.query.having.take() {
+            Some(e) => e.and(h.filter),
+            None => h.filter,
+        });
+        self
+    }
+
+    /// Order the groups by a `group_by` column: `order::status::asc()`.
+    #[must_use]
+    pub fn order_by(mut self, order: (String, Order)) -> Self {
+        self.query.order.push(order);
+        self
+    }
+
+    /// Order the groups by an aggregate value (`order::total::sum().desc()`), computing it too.
+    #[must_use]
+    pub fn order_by_value(mut self, order: AggOrder<M>) -> Self {
+        let alias = order.0.alias();
+        add(&mut self.query.values, order.0);
+        self.query.order.push((alias, order.1));
+        self
+    }
+
+    /// At most `n` groups.
+    #[must_use]
+    pub fn take(mut self, n: i64) -> Self {
+        self.query.limit = Some(n);
+        self
+    }
+
+    /// Skip the first `n` groups.
+    #[must_use]
+    pub fn skip(mut self, n: i64) -> Self {
+        self.query.offset = Some(n);
+        self
+    }
+
+    /// The statement, for logging or running elsewhere.
+    #[must_use]
+    pub fn statement(&self) -> &Aggregate {
+        &self.query
+    }
+
+    /// Run it: one statement, one group per row.
+    ///
+    /// # Errors
+    /// A coded error from the database.
+    pub async fn exec(mut self) -> Result<Vec<M::Group>> {
+        self.run.fetch_all(self.query.build()).await
+    }
+}
+
 /// Read an aggregate column from a result row: `None` when the value is NULL or the column was
 /// not asked for. The generated client decodes its aggregate results with this.
 ///
 /// # Errors
 /// When the column holds a different type.
-pub fn read<'r, T>(row: &'r sqlx::postgres::PgRow, column: &str) -> Result<Option<T>, sqlx::Error>
+pub fn read<'r, T>(
+    row: &'r sqlx::postgres::PgRow,
+    column: &str,
+) -> std::result::Result<Option<T>, sqlx::Error>
 where
     T: sqlx::Decode<'r, sqlx::Postgres> + sqlx::Type<sqlx::Postgres>,
 {
@@ -342,7 +655,10 @@ mod tests {
         q.group_by = vec!["status".into()];
         q.values = vec![Agg::count_all(), Agg::sum("total").cast("bigint")];
         q.having = Some(col("_count").gte(2_i64).or(col("status").equals("NEW")));
-        q.order = vec![("_sum_total".into(), Order::Desc), ("status".into(), Order::Asc)];
+        q.order = vec![
+            ("_sum_total".into(), Order::Desc),
+            ("status".into(), Order::Asc),
+        ];
         q.limit = Some(5);
         q.offset = Some(5);
         let b = q.build();

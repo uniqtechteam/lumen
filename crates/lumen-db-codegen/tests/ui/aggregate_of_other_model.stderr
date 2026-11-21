@@ -1,0 +1,24 @@
+error[E0308]: mismatched types
+ --> tests/ui/aggregate_of_other_model.rs:8:45
+  |
+8 |     let _ = client.post().aggregate().value(db::user::id::sum());
+  |                                       ----- ^^^^^^^^^^^^^^^^^^^ expected `post::aggregates::Model`, found `db::user::aggregates::Model`
+  |                                       |
+  |                                       arguments to this method are incorrect
+  |
+  = note: `db::user::aggregates::Model` and `post::aggregates::Model` have similar names, but are actually distinct types
+note: `db::user::aggregates::Model` is defined in module `crate::db::user::aggregates` of the current crate
+ --> tests/ui/../generated/blog.rs
+  |
+  |         pub struct Model;
+  |         ^^^^^^^^^^^^^^^^
+note: `post::aggregates::Model` is defined in module `crate::db::post::aggregates` of the current crate
+ --> tests/ui/../generated/blog.rs
+  |
+  |         pub struct Model;
+  |         ^^^^^^^^^^^^^^^^
+note: method defined here
+ --> $WORKSPACE/crates/lumen-orm/src/aggregate.rs
+  |
+  |     pub fn value(mut self, v: AggValue<M>) -> Self {
+  |            ^^^^^
