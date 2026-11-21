@@ -1272,7 +1272,7 @@ checksum = "5d15f86d12da44cd8d4ec3c73984537eb7f4cadcb9776a575a0a8a05ca11005c"
 
 [[package]]
 name = "lumen-db-cli"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "clap",
  "lumen-db-codegen",
@@ -1287,7 +1287,7 @@ dependencies = [
 
 [[package]]
 name = "lumen-db-codegen"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "lumen-migrate",
  "lumen-orm",
@@ -1303,7 +1303,7 @@ dependencies = [
 
 [[package]]
 name = "lumen-migrate"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "lumen-schema",
  "mongodb",
@@ -1316,7 +1316,7 @@ dependencies = [
 
 [[package]]
 name = "lumen-orm"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "chrono",
  "lumen-orm",
@@ -1332,7 +1332,7 @@ dependencies = [
 
 [[package]]
 name = "lumen-schema"
-version = "0.2.0"
+version = "0.2.1"
 
 [[package]]
 name = "macro_magic"
