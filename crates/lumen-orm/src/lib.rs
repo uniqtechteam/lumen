@@ -20,6 +20,7 @@
 //! # Ok(()) }
 //! ```
 
+mod aggregate;
 mod dates;
 mod db;
 mod error;
@@ -33,6 +34,7 @@ mod value;
 
 #[cfg(feature = "time")]
 pub use dates::serde as time_serde;
+pub use aggregate::{Agg, AggFn, Aggregate, read as read_aggregate};
 pub use db::{Db, Isolation, Run, Tx};
 pub use error::{Error, ErrorInfo, Result};
 pub use filter::{Col, Filter, Link, Mode, Op, Quantifier, Related, col};

@@ -31,7 +31,7 @@ impl Table {
         }
     }
 
-    fn sql(&self) -> String {
+    pub(crate) fn sql(&self) -> String {
         match &self.schema {
             Some(s) => format!("{}.{}", ident(s), ident(&self.name)),
             None => ident(&self.name),
@@ -59,8 +59,8 @@ pub struct Built {
 
 /// Collects SQL and parameters together.
 #[derive(Debug, Default)]
-struct Writer {
-    sql: String,
+pub(crate) struct Writer {
+    pub(crate) sql: String,
     params: Vec<Value>,
     /// The table the statement filters, which relation subqueries refer back to.
     table: String,
@@ -71,7 +71,7 @@ struct Writer {
 }
 
 impl Writer {
-    fn on(table: &Table) -> Self {
+    pub(crate) fn on(table: &Table) -> Self {
         Self {
             table: table.sql(),
             ..Self::default()
@@ -86,11 +86,11 @@ impl Writer {
         }
     }
 
-    fn push(&mut self, s: &str) {
+    pub(crate) fn push(&mut self, s: &str) {
         self.sql.push_str(s);
     }
 
-    fn param(&mut self, value: Value) {
+    pub(crate) fn param(&mut self, value: Value) {
         // a NULL parameter would be typed `text`; the literal fits any column
         if value == Value::Null {
             self.push("NULL");
@@ -145,7 +145,7 @@ impl Writer {
         self.push(")");
     }
 
-    fn filter(&mut self, filter: &Filter) {
+    pub(crate) fn filter(&mut self, filter: &Filter) {
         match filter {
             Filter::And(items) | Filter::Or(items) if items.is_empty() => {
                 self.push(if matches!(filter, Filter::And(_)) {
@@ -298,7 +298,7 @@ impl Writer {
         self.push(")");
     }
 
-    fn done(self) -> Built {
+    pub(crate) fn done(self) -> Built {
         Built {
             sql: self.sql,
             params: self.params,
