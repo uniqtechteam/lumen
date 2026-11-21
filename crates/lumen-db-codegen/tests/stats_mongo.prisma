@@ -1,0 +1,15 @@
+// Numbers to aggregate on MongoDB: the same sales as the Postgres aggregate tests use.
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+model Sale {
+  id     String   @id @default(auto()) @map("_id") @db.ObjectId
+  region String
+  units  Int
+  amount Decimal
+  score  Float?
+  note   String?
+  at     DateTime @default(now())
+}

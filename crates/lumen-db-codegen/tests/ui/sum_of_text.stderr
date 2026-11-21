@@ -1,0 +1,22 @@
+error[E0425]: cannot find function `sum` in module `db::post::title`
+ --> tests/ui/sum_of_text.rs:8:30
+  |
+8 |     let _ = db::post::title::sum();
+  |                              ^^^ not found in `db::post::title`
+  |
+help: consider importing one of these functions
+  |
+1 + use crate::db::post::author_id::sum;
+  |
+1 + use crate::db::post::id::sum;
+  |
+1 + use crate::db::post::views::sum;
+  |
+1 + use crate::db::profile::id::sum;
+  |
+  = and 2 other candidates
+help: if you import `sum`, refer to it directly
+  |
+8 -     let _ = db::post::title::sum();
+8 +     let _ = sum();
+  |

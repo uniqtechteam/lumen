@@ -528,12 +528,13 @@ pub fn module(schema: &Schema, model_id: ModelId) -> TokenStream {
         .fields
         .iter()
         .filter(|f| !f.ignored && f.is_scalar_like() && base_type(schema, f).is_some())
-        .map(|f| field_module(schema, f));
+        .map(|f| field_module(schema, f, &crate::aggregate::field_fns(model, f)));
     let relations = crate::relation_filter::modules(schema, model_id, true);
     let create = create_input(schema, model);
     let update = update_input(schema, model);
     let unique = unique_where(schema, model);
     let actions = actions(model);
+    let aggregates = crate::aggregate::model_code(schema, model, true);
     let includes = includes(schema, model_id)
         .iter()
         .map(|i| include_code(schema, model, i))
@@ -556,6 +557,7 @@ pub fn module(schema: &Schema, model_id: ModelId) -> TokenStream {
             #update
             #unique
             #actions
+            #aggregates
             #(#includes)*
             #nested
         }

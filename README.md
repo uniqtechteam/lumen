@@ -313,6 +313,42 @@ it is still there. MongoDB runs nested writes in its own transactions, so it nee
 MongoDB has no savepoints, so inside a transaction the nested write simply joins it, and returning
 its error rolls back the whole thing.
 
+## Counts, sums and groups
+
+`aggregate()` computes values over the records a filter matches, and `group_by()` computes them
+per group, each in one statement. Every field's module has `count()`, and `sum()`, `avg()`,
+`min()` and `max()` where its type allows them, so `post::title::sum()` does not compile.
+
+```rust
+let stats = client
+    .post()
+    .aggregate()
+    .filter(post::published::equals(true))
+    .count()
+    .value(post::views::sum())
+    .value(post::views::avg())
+    .exec()
+    .await?;
+// stats.count == Some(3), stats.sum.views == Some(65), stats.avg.views == Some(21.66..)
+
+let authors = client
+    .post()
+    .group_by([post::author_id::COLUMN])
+    .count()
+    .having(post::views::sum().gte(5))
+    .order_by_value(post::views::sum().desc())
+    .take(10)
+    .exec()
+    .await?;
+// authors[0].key.author_id, authors[0].values.count, authors[0].values.sum.views
+```
+
+Values you did not ask for are `None`. Over no records the count is 0 and the other values are
+`None`, on Postgres and MongoDB alike. A sum of `Int` or `BigInt` fields is an `i64`, an average is
+an `f64`, and `Decimal` fields keep every digit. `take` and `skip` pick the records before they
+are aggregated, and with `group_by` they page the groups. On MongoDB the same calls run as one
+aggregation pipeline.
+
 ## What it does
 
 | | Postgres | MongoDB |
@@ -323,6 +359,7 @@ its error rolls back the whole thing.
 | `db pull` | tables, views, enums, keys, indexes, relations; keeps your names and comments | by sampling documents |
 | `generate --watch` | yes | yes |
 | Generated client: filters, ordering, paging, create, update, upsert, delete, count | yes | yes |
+| `aggregate()` and `group_by()`: count, sum, avg, min, max, having | yes, one statement | yes, one pipeline |
 | Relation filters (`some`, `every`, `none`, `is`, `is_not`) | yes (`EXISTS`) | yes, many-to-many through id lists (one extra statement per relation filter) |
 | Includes, one statement per level | yes | yes (`$in`) |
 | Nested writes: create with nested `create` and `connect` | yes | yes |
@@ -470,7 +507,6 @@ Without a terminal, a command that would lose data stops and asks you to pass
   the Postgres tests on macOS and Windows against Postgres 17. The MongoDB tests run on Linux
   only: they need a replica set in Docker, which the macOS and Windows runners do not have.
 - Planned, not built yet:
-  - aggregates and `groupBy`
   - cursor pagination, and ordering by the number of related rows
   - a `select` builder on `find_many`, and `utoipa::ToSchema` on the generated types
   - many-to-many and nested includes in the generated client (the query builder already has them)

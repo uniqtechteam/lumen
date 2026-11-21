@@ -9,6 +9,7 @@
 //! assert!(code.contains("pub mod user"));
 //! ```
 
+mod aggregate;
 mod model;
 mod mongo_model;
 mod nested;

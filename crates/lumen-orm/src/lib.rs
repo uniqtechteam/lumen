@@ -20,6 +20,7 @@
 //! # Ok(()) }
 //! ```
 
+mod aggregate;
 mod dates;
 mod db;
 mod error;
@@ -31,6 +32,10 @@ pub mod nested;
 mod query;
 mod value;
 
+pub use aggregate::{
+    Agg, AggFn, AggModel, AggOrder, AggValue, Aggregate, AggregateQuery, GroupByQuery, Having,
+    read as read_aggregate,
+};
 #[cfg(feature = "time")]
 pub use dates::serde as time_serde;
 pub use db::{Db, Isolation, Run, Tx};

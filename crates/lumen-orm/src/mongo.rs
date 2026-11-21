@@ -2,6 +2,7 @@
 //! `not` keeps documents where the field is null or missing. Relation filters run as
 //! one extra statement per relation filter (see `relations`).
 
+mod aggregate;
 mod errors;
 mod relations;
 
@@ -10,11 +11,12 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use mongodb::ClientSession;
-use mongodb::bson::{self, Bson, Document, doc};
+use mongodb::bson::{self, Bson, doc};
 use mongodb::options::FindOptions;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 
+use crate::aggregate::Aggregate;
 use crate::error::{Error, Result};
 use crate::filter::{Filter, Mode, Op};
 use crate::query::Order;
@@ -22,8 +24,13 @@ use crate::value::Value;
 use errors::{mongo_err, write_err};
 use relations::{Exec, resolve_opt};
 
+pub use aggregate::{
+    MongoAggModel, MongoAggregateQuery, MongoGroupByQuery, pipeline as aggregate_pipeline,
+    read as read_aggregate,
+};
+
 /// The BSON types the generated MongoDB client uses.
-pub use mongodb::bson::{Binary, DateTime, Decimal128, oid::ObjectId};
+pub use mongodb::bson::{Binary, DateTime, Decimal128, Document, oid::ObjectId};
 
 impl From<ObjectId> for Value {
     fn from(v: ObjectId) -> Self {
@@ -505,6 +512,33 @@ impl MongoDb {
             .map_err(|e| mongo_err(&e))
     }
 
+    /// The result documents of an aggregate, in one pipeline.
+    ///
+    /// # Errors
+    /// A coded [`Error`].
+    pub async fn aggregate(&self, agg: &Aggregate) -> Result<Vec<Document>> {
+        let agg = Aggregate {
+            filter: self.resolved(agg.filter.as_ref()).await?,
+            ..agg.clone()
+        };
+        self.tick();
+        let mut cursor = self
+            .db
+            .collection::<Document>(&agg.table.name)
+            .aggregate(aggregate_pipeline(&agg)?)
+            .await
+            .map_err(|e| mongo_err(&e))?;
+        let mut out = Vec::new();
+        while cursor.advance().await.map_err(|e| mongo_err(&e))? {
+            out.push(
+                cursor
+                    .deserialize_current()
+                    .map_err(|e| Error::new("P2023", e.to_string()))?,
+            );
+        }
+        Ok(out)
+    }
+
     /// Insert documents; their ids.
     ///
     /// # Errors
@@ -615,6 +649,18 @@ pub trait MongoRun {
     /// # Errors
     /// A coded [`Error`].
     async fn count(&mut self, collection: &str, filter: Option<&Filter>) -> Result<u64>;
+    /// The result documents of an aggregate, run as one pipeline. Runners outside lumen that do
+    /// not implement it answer P2026.
+    ///
+    /// # Errors
+    /// A coded [`Error`].
+    async fn aggregate(&mut self, agg: &Aggregate) -> Result<Vec<Document>> {
+        let _ = agg;
+        Err(Error::new(
+            "P2026",
+            "this runner does not support aggregates".to_owned(),
+        ))
+    }
     /// Insert documents; their ids.
     ///
     /// # Errors
@@ -656,6 +702,9 @@ impl MongoRun for &MongoDb {
     async fn count(&mut self, collection: &str, filter: Option<&Filter>) -> Result<u64> {
         MongoDb::count(self, collection, filter).await
     }
+    async fn aggregate(&mut self, agg: &Aggregate) -> Result<Vec<Document>> {
+        MongoDb::aggregate(self, agg).await
+    }
     async fn insert_many<T: Serialize + Send + Sync>(
         &mut self,
         collection: &str,
@@ -690,6 +739,9 @@ impl<T: MongoRun> MongoRun for &mut T {
     }
     async fn count(&mut self, collection: &str, filter: Option<&Filter>) -> Result<u64> {
         (**self).count(collection, filter).await
+    }
+    async fn aggregate(&mut self, agg: &Aggregate) -> Result<Vec<Document>> {
+        (**self).aggregate(agg).await
     }
     async fn insert_many<U: Serialize + Send + Sync>(
         &mut self,
@@ -801,6 +853,34 @@ impl MongoRun for MongoTx {
             .session(&mut self.session)
             .await
             .map_err(|e| mongo_err(&e))
+    }
+
+    async fn aggregate(&mut self, agg: &Aggregate) -> Result<Vec<Document>> {
+        let agg = Aggregate {
+            filter: self.resolved(agg.filter.as_ref()).await?,
+            ..agg.clone()
+        };
+        self.statements.fetch_add(1, Ordering::Relaxed);
+        let mut cursor = self
+            .db
+            .collection::<Document>(&agg.table.name)
+            .aggregate(aggregate_pipeline(&agg)?)
+            .session(&mut self.session)
+            .await
+            .map_err(|e| mongo_err(&e))?;
+        let mut out = Vec::new();
+        while cursor
+            .advance(&mut self.session)
+            .await
+            .map_err(|e| mongo_err(&e))?
+        {
+            out.push(
+                cursor
+                    .deserialize_current()
+                    .map_err(|e| Error::new("P2023", e.to_string()))?,
+            );
+        }
+        Ok(out)
     }
 
     async fn insert_many<T: Serialize + Send + Sync>(

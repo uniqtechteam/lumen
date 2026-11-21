@@ -267,6 +267,8 @@ field `createdAt` is `user::created_at`.
 | `create({ data: { .., posts: { create: [..], connect: [..] } } })` | `create_nested(user::Create { .. }, user::Nested { posts: Many::create(vec![..]).and_connect(vec![..]), .. })` |
 | `post.create({ data: { .., author: { connect: { email } } } })` | `create_with_author(post::CreateWithoutAuthor { .. }, One::Connect(user::UniqueWhere::Email(..)))` |
 | `delete`, `deleteMany`, `updateMany`, `createMany`, `count` | `delete`, `delete_many`, `update_many`, `create_many`, `count` |
+| `aggregate({ where, _count: true, _sum: { views: true } })` | `aggregate().filter(..).count().value(post::views::sum()).exec()`, which returns `post::aggregates::Aggregate` with `count` and `sum.views` |
+| `groupBy({ by: ['authorId'], _count: true, having: { views: { _sum: { gte: 5 } } }, orderBy: { _sum: { views: 'desc' } } })` | `group_by([post::author_id::COLUMN]).count().having(post::views::sum().gte(5)).order_by_value(post::views::sum().desc()).exec()`; each group has `key.author_id` and `values` |
 | `$transaction(async (tx) => ..)` | `client.db().transaction(async \|tx\| { user::on(&mut *tx).create(..).await })` |
 
 Filters are functions on the field's module, and each one only takes values of that field's type.
@@ -330,7 +332,7 @@ API should answer with.
   does not exist is a compile error, not a runtime one.
 - **Includes return their own types.** `.include_posts()` returns `user::WithPosts`, a record with
   a `posts` field, rather than adding a field to `User`.
-- **Not in 0.1 yet:** `select`, aggregates and `groupBy`, cursor pagination, ordering by relation
+- **Not built yet:** `select`, cursor pagination, ordering by relation
   count, includes of many-to-many relations and nested includes in the generated client,
   `connect_or_create`, `disconnect`, `set` and nested writes inside `update`. The README's Limits
   section has the current list.

@@ -101,6 +101,10 @@ pub mod product {
         pub fn gte(v: ::lumen_orm::uuid::Uuid) -> ::lumen_orm::Filter {
             ::lumen_orm::col(COLUMN).gte(::lumen_orm::Value::from(v))
         }
+        /// How many records have a value here (not NULL), for `aggregate()` and `group_by()`.
+        pub fn count() -> super::aggregates::Value {
+            super::aggregates::Value::new(::lumen_orm::Agg::count(COLUMN))
+        }
         /// Smallest first.
         pub fn asc() -> (String, ::lumen_orm::Order) {
             (COLUMN.to_owned(), ::lumen_orm::Order::Asc)
@@ -176,6 +180,18 @@ pub mod product {
         pub fn equals_insensitive(v: impl Into<String>) -> ::lumen_orm::Filter {
             ::lumen_orm::col(COLUMN).equals_insensitive(v)
         }
+        /// How many records have a value here (not NULL), for `aggregate()` and `group_by()`.
+        pub fn count() -> super::aggregates::Value {
+            super::aggregates::Value::new(::lumen_orm::Agg::count(COLUMN))
+        }
+        /// The smallest value, for `aggregate()` and `group_by()`.
+        pub fn min() -> super::aggregates::Value {
+            super::aggregates::Value::new(::lumen_orm::Agg::min(COLUMN))
+        }
+        /// The largest value, for `aggregate()` and `group_by()`.
+        pub fn max() -> super::aggregates::Value {
+            super::aggregates::Value::new(::lumen_orm::Agg::max(COLUMN))
+        }
         /// Smallest first.
         pub fn asc() -> (String, ::lumen_orm::Order) {
             (COLUMN.to_owned(), ::lumen_orm::Order::Asc)
@@ -227,6 +243,26 @@ pub mod product {
         pub fn gte(v: ::lumen_orm::rust_decimal::Decimal) -> ::lumen_orm::Filter {
             ::lumen_orm::col(COLUMN).gte(::lumen_orm::Value::from(v))
         }
+        /// How many records have a value here (not NULL), for `aggregate()` and `group_by()`.
+        pub fn count() -> super::aggregates::Value {
+            super::aggregates::Value::new(::lumen_orm::Agg::count(COLUMN))
+        }
+        /// The sum, for `aggregate()` and `group_by()`.
+        pub fn sum() -> super::aggregates::Value {
+            super::aggregates::Value::new(::lumen_orm::Agg::sum(COLUMN))
+        }
+        /// The average, for `aggregate()` and `group_by()`.
+        pub fn avg() -> super::aggregates::Value {
+            super::aggregates::Value::new(::lumen_orm::Agg::avg(COLUMN))
+        }
+        /// The smallest value, for `aggregate()` and `group_by()`.
+        pub fn min() -> super::aggregates::Value {
+            super::aggregates::Value::new(::lumen_orm::Agg::min(COLUMN))
+        }
+        /// The largest value, for `aggregate()` and `group_by()`.
+        pub fn max() -> super::aggregates::Value {
+            super::aggregates::Value::new(::lumen_orm::Agg::max(COLUMN))
+        }
         /// Smallest first.
         pub fn asc() -> (String, ::lumen_orm::Order) {
             (COLUMN.to_owned(), ::lumen_orm::Order::Asc)
@@ -261,6 +297,10 @@ pub mod product {
         ) -> ::lumen_orm::Filter {
             ::lumen_orm::col(COLUMN)
                 .not_in(values.into_iter().map(::lumen_orm::Value::from))
+        }
+        /// How many records have a value here (not NULL), for `aggregate()` and `group_by()`.
+        pub fn count() -> super::aggregates::Value {
+            super::aggregates::Value::new(::lumen_orm::Agg::count(COLUMN))
         }
         /// Smallest first.
         pub fn asc() -> (String, ::lumen_orm::Order) {
@@ -301,6 +341,10 @@ pub mod product {
         pub fn is_not_null() -> ::lumen_orm::Filter {
             ::lumen_orm::col(COLUMN).is_not_null()
         }
+        /// How many records have a value here (not NULL), for `aggregate()` and `group_by()`.
+        pub fn count() -> super::aggregates::Value {
+            super::aggregates::Value::new(::lumen_orm::Agg::count(COLUMN))
+        }
         /// Smallest first.
         pub fn asc() -> (String, ::lumen_orm::Order) {
             (COLUMN.to_owned(), ::lumen_orm::Order::Asc)
@@ -331,6 +375,10 @@ pub mod product {
         pub fn not_in(values: impl IntoIterator<Item = bool>) -> ::lumen_orm::Filter {
             ::lumen_orm::col(COLUMN)
                 .not_in(values.into_iter().map(::lumen_orm::Value::from))
+        }
+        /// How many records have a value here (not NULL), for `aggregate()` and `group_by()`.
+        pub fn count() -> super::aggregates::Value {
+            super::aggregates::Value::new(::lumen_orm::Agg::count(COLUMN))
         }
         /// Smallest first.
         pub fn asc() -> (String, ::lumen_orm::Order) {
@@ -709,6 +757,186 @@ pub mod product {
             ::lumen_orm::Run::fetch_all(&mut self.run, self.select.build()).await
         }
     }
+    /// `aggregate()` and `group_by()` on `Product`.
+    pub mod aggregates {
+        /// Tags this model's aggregate values and conditions, and names its result types.
+        #[derive(Debug, Clone, Copy)]
+        pub struct Model;
+        /// An aggregate value: `count()`, or `count()`, `sum()`, `avg()`, `min()`, `max()` of a
+        /// field, for example `order::total::sum()`.
+        pub type Value = ::lumen_orm::AggValue<Model>;
+        /// A condition on groups.
+        pub type Having = ::lumen_orm::Having<Model>;
+        /// `COUNT(*)`: the number of records (in each group).
+        pub fn count() -> Value {
+            Value::new(::lumen_orm::Agg::count_all())
+        }
+        /// Non-NULL counts per field.
+        #[derive(Debug, Clone, PartialEq, Default)]
+        pub struct Counts {
+            /// `id`.
+            pub id: Option<i64>,
+            /// `sku`.
+            pub sku: Option<i64>,
+            /// `price`.
+            pub price: Option<i64>,
+            /// `data`.
+            pub data: Option<i64>,
+            /// `image`.
+            pub image: Option<i64>,
+            /// `archived`.
+            pub archived: Option<i64>,
+        }
+        /// Sums per numeric field.
+        #[derive(Debug, Clone, PartialEq, Default)]
+        pub struct Sums {
+            /// `price`.
+            pub price: Option<::lumen_orm::rust_decimal::Decimal>,
+        }
+        /// Averages per numeric field.
+        #[derive(Debug, Clone, PartialEq, Default)]
+        pub struct Avgs {
+            /// `price`.
+            pub price: Option<::lumen_orm::rust_decimal::Decimal>,
+        }
+        /// Smallest values per field.
+        #[derive(Debug, Clone, PartialEq, Default)]
+        pub struct Mins {
+            /// `sku`.
+            pub sku: Option<String>,
+            /// `price`.
+            pub price: Option<::lumen_orm::rust_decimal::Decimal>,
+        }
+        /// Largest values per field.
+        #[derive(Debug, Clone, PartialEq, Default)]
+        pub struct Maxes {
+            /// `sku`.
+            pub sku: Option<String>,
+            /// `price`.
+            pub price: Option<::lumen_orm::rust_decimal::Decimal>,
+        }
+        /// The group's values of the `group_by` fields; the others are `None`.
+        #[derive(Debug, Clone, PartialEq, Default)]
+        pub struct Key {
+            /// `id`.
+            pub id: Option<::lumen_orm::uuid::Uuid>,
+            /// `sku`.
+            pub sku: Option<String>,
+            /// `price`.
+            pub price: Option<::lumen_orm::rust_decimal::Decimal>,
+            /// `data`.
+            pub data: Option<::lumen_orm::serde_json::Value>,
+            /// `image`.
+            pub image: Option<Vec<u8>>,
+            /// `archived`.
+            pub archived: Option<bool>,
+        }
+        /// The aggregate values asked for; the rest are `None`, and so are sums, averages and
+        /// extremes over no records.
+        #[derive(Debug, Clone, PartialEq, Default)]
+        pub struct Aggregate {
+            /// `count()`: the number of records.
+            pub count: Option<i64>,
+            /// `<field>::count()`.
+            pub count_of: Counts,
+            /// `<field>::sum()`.
+            pub sum: Sums,
+            /// `<field>::avg()`.
+            pub avg: Avgs,
+            /// `<field>::min()`.
+            pub min: Mins,
+            /// `<field>::max()`.
+            pub max: Maxes,
+        }
+        /// One group of `group_by()`: its key and its aggregate values.
+        #[derive(Debug, Clone, PartialEq, Default)]
+        pub struct Group {
+            /// The values the group's records share.
+            pub key: Key,
+            /// The aggregate values over the group.
+            pub values: Aggregate,
+        }
+        impl ::lumen_orm::AggModel for Model {
+            type Aggregate = Aggregate;
+            type Group = Group;
+        }
+        /// The builder `aggregate()` returns.
+        pub type Query<R> = ::lumen_orm::AggregateQuery<R, Model>;
+        /// The builder `group_by()` returns.
+        pub type GroupBy<R> = ::lumen_orm::GroupByQuery<R, Model>;
+        impl Aggregate {
+            fn read(
+                row: &::lumen_orm::sqlx::postgres::PgRow,
+            ) -> ::core::result::Result<Self, ::lumen_orm::sqlx::Error> {
+                Ok(Self {
+                    count: ::lumen_orm::read_aggregate(row, "_count")?,
+                    count_of: Counts {
+                        id: ::lumen_orm::read_aggregate(row, "_count_id")?,
+                        sku: ::lumen_orm::read_aggregate(row, "_count_sku")?,
+                        price: ::lumen_orm::read_aggregate(row, "_count_price")?,
+                        data: ::lumen_orm::read_aggregate(row, "_count_data")?,
+                        image: ::lumen_orm::read_aggregate(row, "_count_image")?,
+                        archived: ::lumen_orm::read_aggregate(row, "_count_archived")?,
+                    },
+                    sum: Sums {
+                        price: ::lumen_orm::read_aggregate(row, "_sum_price")?,
+                    },
+                    avg: Avgs {
+                        price: ::lumen_orm::read_aggregate(row, "_avg_price")?,
+                    },
+                    min: Mins {
+                        sku: ::lumen_orm::read_aggregate(row, "_min_sku")?,
+                        price: ::lumen_orm::read_aggregate(row, "_min_price")?,
+                    },
+                    max: Maxes {
+                        sku: ::lumen_orm::read_aggregate(row, "_max_sku")?,
+                        price: ::lumen_orm::read_aggregate(row, "_max_price")?,
+                    },
+                })
+            }
+        }
+        impl<'r> ::lumen_orm::sqlx::FromRow<'r, ::lumen_orm::sqlx::postgres::PgRow>
+        for Aggregate {
+            fn from_row(
+                row: &'r ::lumen_orm::sqlx::postgres::PgRow,
+            ) -> ::core::result::Result<Self, ::lumen_orm::sqlx::Error> {
+                Self::read(row)
+            }
+        }
+        impl<'r> ::lumen_orm::sqlx::FromRow<'r, ::lumen_orm::sqlx::postgres::PgRow>
+        for Group {
+            fn from_row(
+                row: &'r ::lumen_orm::sqlx::postgres::PgRow,
+            ) -> ::core::result::Result<Self, ::lumen_orm::sqlx::Error> {
+                Ok(Self {
+                    key: Key {
+                        id: ::lumen_orm::read_aggregate(row, "id")?,
+                        sku: ::lumen_orm::read_aggregate(row, "sku")?,
+                        price: ::lumen_orm::read_aggregate(row, "price")?,
+                        data: ::lumen_orm::read_aggregate(row, "data")?,
+                        image: ::lumen_orm::read_aggregate(row, "image")?,
+                        archived: ::lumen_orm::read_aggregate(row, "archived")?,
+                    },
+                    values: Aggregate::read(row)?,
+                })
+            }
+        }
+    }
+    impl<R: ::lumen_orm::Run> Actions<R> {
+        /// Count, sum, average, min and max over the records that match, in one statement:
+        /// `db.order().aggregate().count().value(order::total::sum()).exec()`.
+        pub fn aggregate(self) -> aggregates::Query<R> {
+            ::lumen_orm::AggregateQuery::new(self.run, table())
+        }
+        /// Aggregate values per group of records sharing `columns`:
+        /// `db.order().group_by([order::status::COLUMN]).count().exec()`.
+        pub fn group_by<'a>(
+            self,
+            columns: impl IntoIterator<Item = &'a str>,
+        ) -> aggregates::GroupBy<R> {
+            ::lumen_orm::GroupByQuery::new(self.run, table(), columns)
+        }
+    }
     /// A `Product` with its `lines`.
     #[derive(Debug, Clone, PartialEq, ::lumen_orm::serde::Serialize)]
     #[serde(crate = "::lumen_orm::serde")]
@@ -939,6 +1167,28 @@ pub mod order {
         /// At least `v`.
         pub fn gte(v: i32) -> ::lumen_orm::Filter {
             ::lumen_orm::col(COLUMN).gte(::lumen_orm::Value::from(v))
+        }
+        /// How many records have a value here (not NULL), for `aggregate()` and `group_by()`.
+        pub fn count() -> super::aggregates::Value {
+            super::aggregates::Value::new(::lumen_orm::Agg::count(COLUMN))
+        }
+        /// The sum, for `aggregate()` and `group_by()`.
+        pub fn sum() -> super::aggregates::Value {
+            super::aggregates::Value::new(::lumen_orm::Agg::sum(COLUMN).cast("bigint"))
+        }
+        /// The average, for `aggregate()` and `group_by()`.
+        pub fn avg() -> super::aggregates::Value {
+            super::aggregates::Value::new(
+                ::lumen_orm::Agg::avg(COLUMN).cast("double precision"),
+            )
+        }
+        /// The smallest value, for `aggregate()` and `group_by()`.
+        pub fn min() -> super::aggregates::Value {
+            super::aggregates::Value::new(::lumen_orm::Agg::min(COLUMN))
+        }
+        /// The largest value, for `aggregate()` and `group_by()`.
+        pub fn max() -> super::aggregates::Value {
+            super::aggregates::Value::new(::lumen_orm::Agg::max(COLUMN))
         }
         /// Smallest first.
         pub fn asc() -> (String, ::lumen_orm::Order) {
@@ -1271,6 +1521,150 @@ pub mod order {
             ::lumen_orm::Run::fetch_all(&mut self.run, self.select.build()).await
         }
     }
+    /// `aggregate()` and `group_by()` on `Order`.
+    pub mod aggregates {
+        /// Tags this model's aggregate values and conditions, and names its result types.
+        #[derive(Debug, Clone, Copy)]
+        pub struct Model;
+        /// An aggregate value: `count()`, or `count()`, `sum()`, `avg()`, `min()`, `max()` of a
+        /// field, for example `order::total::sum()`.
+        pub type Value = ::lumen_orm::AggValue<Model>;
+        /// A condition on groups.
+        pub type Having = ::lumen_orm::Having<Model>;
+        /// `COUNT(*)`: the number of records (in each group).
+        pub fn count() -> Value {
+            Value::new(::lumen_orm::Agg::count_all())
+        }
+        /// Non-NULL counts per field.
+        #[derive(Debug, Clone, PartialEq, Default)]
+        pub struct Counts {
+            /// `id`.
+            pub id: Option<i64>,
+        }
+        /// Sums per numeric field.
+        #[derive(Debug, Clone, PartialEq, Default)]
+        pub struct Sums {
+            /// `id`.
+            pub id: Option<i64>,
+        }
+        /// Averages per numeric field.
+        #[derive(Debug, Clone, PartialEq, Default)]
+        pub struct Avgs {
+            /// `id`.
+            pub id: Option<f64>,
+        }
+        /// Smallest values per field.
+        #[derive(Debug, Clone, PartialEq, Default)]
+        pub struct Mins {
+            /// `id`.
+            pub id: Option<i32>,
+        }
+        /// Largest values per field.
+        #[derive(Debug, Clone, PartialEq, Default)]
+        pub struct Maxes {
+            /// `id`.
+            pub id: Option<i32>,
+        }
+        /// The group's values of the `group_by` fields; the others are `None`.
+        #[derive(Debug, Clone, PartialEq, Default)]
+        pub struct Key {
+            /// `id`.
+            pub id: Option<i32>,
+        }
+        /// The aggregate values asked for; the rest are `None`, and so are sums, averages and
+        /// extremes over no records.
+        #[derive(Debug, Clone, PartialEq, Default)]
+        pub struct Aggregate {
+            /// `count()`: the number of records.
+            pub count: Option<i64>,
+            /// `<field>::count()`.
+            pub count_of: Counts,
+            /// `<field>::sum()`.
+            pub sum: Sums,
+            /// `<field>::avg()`.
+            pub avg: Avgs,
+            /// `<field>::min()`.
+            pub min: Mins,
+            /// `<field>::max()`.
+            pub max: Maxes,
+        }
+        /// One group of `group_by()`: its key and its aggregate values.
+        #[derive(Debug, Clone, PartialEq, Default)]
+        pub struct Group {
+            /// The values the group's records share.
+            pub key: Key,
+            /// The aggregate values over the group.
+            pub values: Aggregate,
+        }
+        impl ::lumen_orm::AggModel for Model {
+            type Aggregate = Aggregate;
+            type Group = Group;
+        }
+        /// The builder `aggregate()` returns.
+        pub type Query<R> = ::lumen_orm::AggregateQuery<R, Model>;
+        /// The builder `group_by()` returns.
+        pub type GroupBy<R> = ::lumen_orm::GroupByQuery<R, Model>;
+        impl Aggregate {
+            fn read(
+                row: &::lumen_orm::sqlx::postgres::PgRow,
+            ) -> ::core::result::Result<Self, ::lumen_orm::sqlx::Error> {
+                Ok(Self {
+                    count: ::lumen_orm::read_aggregate(row, "_count")?,
+                    count_of: Counts {
+                        id: ::lumen_orm::read_aggregate(row, "_count_id")?,
+                    },
+                    sum: Sums {
+                        id: ::lumen_orm::read_aggregate(row, "_sum_id")?,
+                    },
+                    avg: Avgs {
+                        id: ::lumen_orm::read_aggregate(row, "_avg_id")?,
+                    },
+                    min: Mins {
+                        id: ::lumen_orm::read_aggregate(row, "_min_id")?,
+                    },
+                    max: Maxes {
+                        id: ::lumen_orm::read_aggregate(row, "_max_id")?,
+                    },
+                })
+            }
+        }
+        impl<'r> ::lumen_orm::sqlx::FromRow<'r, ::lumen_orm::sqlx::postgres::PgRow>
+        for Aggregate {
+            fn from_row(
+                row: &'r ::lumen_orm::sqlx::postgres::PgRow,
+            ) -> ::core::result::Result<Self, ::lumen_orm::sqlx::Error> {
+                Self::read(row)
+            }
+        }
+        impl<'r> ::lumen_orm::sqlx::FromRow<'r, ::lumen_orm::sqlx::postgres::PgRow>
+        for Group {
+            fn from_row(
+                row: &'r ::lumen_orm::sqlx::postgres::PgRow,
+            ) -> ::core::result::Result<Self, ::lumen_orm::sqlx::Error> {
+                Ok(Self {
+                    key: Key {
+                        id: ::lumen_orm::read_aggregate(row, "id")?,
+                    },
+                    values: Aggregate::read(row)?,
+                })
+            }
+        }
+    }
+    impl<R: ::lumen_orm::Run> Actions<R> {
+        /// Count, sum, average, min and max over the records that match, in one statement:
+        /// `db.order().aggregate().count().value(order::total::sum()).exec()`.
+        pub fn aggregate(self) -> aggregates::Query<R> {
+            ::lumen_orm::AggregateQuery::new(self.run, table())
+        }
+        /// Aggregate values per group of records sharing `columns`:
+        /// `db.order().group_by([order::status::COLUMN]).count().exec()`.
+        pub fn group_by<'a>(
+            self,
+            columns: impl IntoIterator<Item = &'a str>,
+        ) -> aggregates::GroupBy<R> {
+            ::lumen_orm::GroupByQuery::new(self.run, table(), columns)
+        }
+    }
     /// A `Order` with its `lines`.
     #[derive(Debug, Clone, PartialEq, ::lumen_orm::serde::Serialize)]
     #[serde(crate = "::lumen_orm::serde")]
@@ -1509,6 +1903,28 @@ pub mod order_line {
         pub fn gte(v: i32) -> ::lumen_orm::Filter {
             ::lumen_orm::col(COLUMN).gte(::lumen_orm::Value::from(v))
         }
+        /// How many records have a value here (not NULL), for `aggregate()` and `group_by()`.
+        pub fn count() -> super::aggregates::Value {
+            super::aggregates::Value::new(::lumen_orm::Agg::count(COLUMN))
+        }
+        /// The sum, for `aggregate()` and `group_by()`.
+        pub fn sum() -> super::aggregates::Value {
+            super::aggregates::Value::new(::lumen_orm::Agg::sum(COLUMN).cast("bigint"))
+        }
+        /// The average, for `aggregate()` and `group_by()`.
+        pub fn avg() -> super::aggregates::Value {
+            super::aggregates::Value::new(
+                ::lumen_orm::Agg::avg(COLUMN).cast("double precision"),
+            )
+        }
+        /// The smallest value, for `aggregate()` and `group_by()`.
+        pub fn min() -> super::aggregates::Value {
+            super::aggregates::Value::new(::lumen_orm::Agg::min(COLUMN))
+        }
+        /// The largest value, for `aggregate()` and `group_by()`.
+        pub fn max() -> super::aggregates::Value {
+            super::aggregates::Value::new(::lumen_orm::Agg::max(COLUMN))
+        }
         /// Smallest first.
         pub fn asc() -> (String, ::lumen_orm::Order) {
             (COLUMN.to_owned(), ::lumen_orm::Order::Asc)
@@ -1560,6 +1976,10 @@ pub mod order_line {
         pub fn gte(v: ::lumen_orm::uuid::Uuid) -> ::lumen_orm::Filter {
             ::lumen_orm::col(COLUMN).gte(::lumen_orm::Value::from(v))
         }
+        /// How many records have a value here (not NULL), for `aggregate()` and `group_by()`.
+        pub fn count() -> super::aggregates::Value {
+            super::aggregates::Value::new(::lumen_orm::Agg::count(COLUMN))
+        }
         /// Smallest first.
         pub fn asc() -> (String, ::lumen_orm::Order) {
             (COLUMN.to_owned(), ::lumen_orm::Order::Asc)
@@ -1606,6 +2026,28 @@ pub mod order_line {
         /// At least `v`.
         pub fn gte(v: i32) -> ::lumen_orm::Filter {
             ::lumen_orm::col(COLUMN).gte(::lumen_orm::Value::from(v))
+        }
+        /// How many records have a value here (not NULL), for `aggregate()` and `group_by()`.
+        pub fn count() -> super::aggregates::Value {
+            super::aggregates::Value::new(::lumen_orm::Agg::count(COLUMN))
+        }
+        /// The sum, for `aggregate()` and `group_by()`.
+        pub fn sum() -> super::aggregates::Value {
+            super::aggregates::Value::new(::lumen_orm::Agg::sum(COLUMN).cast("bigint"))
+        }
+        /// The average, for `aggregate()` and `group_by()`.
+        pub fn avg() -> super::aggregates::Value {
+            super::aggregates::Value::new(
+                ::lumen_orm::Agg::avg(COLUMN).cast("double precision"),
+            )
+        }
+        /// The smallest value, for `aggregate()` and `group_by()`.
+        pub fn min() -> super::aggregates::Value {
+            super::aggregates::Value::new(::lumen_orm::Agg::min(COLUMN))
+        }
+        /// The largest value, for `aggregate()` and `group_by()`.
+        pub fn max() -> super::aggregates::Value {
+            super::aggregates::Value::new(::lumen_orm::Agg::max(COLUMN))
         }
         /// Smallest first.
         pub fn asc() -> (String, ::lumen_orm::Order) {
@@ -1969,6 +2411,177 @@ pub mod order_line {
         /// A coded error from the database.
         pub async fn exec(mut self) -> ::lumen_orm::Result<Vec<OrderLine>> {
             ::lumen_orm::Run::fetch_all(&mut self.run, self.select.build()).await
+        }
+    }
+    /// `aggregate()` and `group_by()` on `OrderLine`.
+    pub mod aggregates {
+        /// Tags this model's aggregate values and conditions, and names its result types.
+        #[derive(Debug, Clone, Copy)]
+        pub struct Model;
+        /// An aggregate value: `count()`, or `count()`, `sum()`, `avg()`, `min()`, `max()` of a
+        /// field, for example `order::total::sum()`.
+        pub type Value = ::lumen_orm::AggValue<Model>;
+        /// A condition on groups.
+        pub type Having = ::lumen_orm::Having<Model>;
+        /// `COUNT(*)`: the number of records (in each group).
+        pub fn count() -> Value {
+            Value::new(::lumen_orm::Agg::count_all())
+        }
+        /// Non-NULL counts per field.
+        #[derive(Debug, Clone, PartialEq, Default)]
+        pub struct Counts {
+            /// `orderId`.
+            pub order_id: Option<i64>,
+            /// `productId`.
+            pub product_id: Option<i64>,
+            /// `quantity`.
+            pub quantity: Option<i64>,
+        }
+        /// Sums per numeric field.
+        #[derive(Debug, Clone, PartialEq, Default)]
+        pub struct Sums {
+            /// `orderId`.
+            pub order_id: Option<i64>,
+            /// `quantity`.
+            pub quantity: Option<i64>,
+        }
+        /// Averages per numeric field.
+        #[derive(Debug, Clone, PartialEq, Default)]
+        pub struct Avgs {
+            /// `orderId`.
+            pub order_id: Option<f64>,
+            /// `quantity`.
+            pub quantity: Option<f64>,
+        }
+        /// Smallest values per field.
+        #[derive(Debug, Clone, PartialEq, Default)]
+        pub struct Mins {
+            /// `orderId`.
+            pub order_id: Option<i32>,
+            /// `quantity`.
+            pub quantity: Option<i32>,
+        }
+        /// Largest values per field.
+        #[derive(Debug, Clone, PartialEq, Default)]
+        pub struct Maxes {
+            /// `orderId`.
+            pub order_id: Option<i32>,
+            /// `quantity`.
+            pub quantity: Option<i32>,
+        }
+        /// The group's values of the `group_by` fields; the others are `None`.
+        #[derive(Debug, Clone, PartialEq, Default)]
+        pub struct Key {
+            /// `orderId`.
+            pub order_id: Option<i32>,
+            /// `productId`.
+            pub product_id: Option<::lumen_orm::uuid::Uuid>,
+            /// `quantity`.
+            pub quantity: Option<i32>,
+        }
+        /// The aggregate values asked for; the rest are `None`, and so are sums, averages and
+        /// extremes over no records.
+        #[derive(Debug, Clone, PartialEq, Default)]
+        pub struct Aggregate {
+            /// `count()`: the number of records.
+            pub count: Option<i64>,
+            /// `<field>::count()`.
+            pub count_of: Counts,
+            /// `<field>::sum()`.
+            pub sum: Sums,
+            /// `<field>::avg()`.
+            pub avg: Avgs,
+            /// `<field>::min()`.
+            pub min: Mins,
+            /// `<field>::max()`.
+            pub max: Maxes,
+        }
+        /// One group of `group_by()`: its key and its aggregate values.
+        #[derive(Debug, Clone, PartialEq, Default)]
+        pub struct Group {
+            /// The values the group's records share.
+            pub key: Key,
+            /// The aggregate values over the group.
+            pub values: Aggregate,
+        }
+        impl ::lumen_orm::AggModel for Model {
+            type Aggregate = Aggregate;
+            type Group = Group;
+        }
+        /// The builder `aggregate()` returns.
+        pub type Query<R> = ::lumen_orm::AggregateQuery<R, Model>;
+        /// The builder `group_by()` returns.
+        pub type GroupBy<R> = ::lumen_orm::GroupByQuery<R, Model>;
+        impl Aggregate {
+            fn read(
+                row: &::lumen_orm::sqlx::postgres::PgRow,
+            ) -> ::core::result::Result<Self, ::lumen_orm::sqlx::Error> {
+                Ok(Self {
+                    count: ::lumen_orm::read_aggregate(row, "_count")?,
+                    count_of: Counts {
+                        order_id: ::lumen_orm::read_aggregate(row, "_count_orderId")?,
+                        product_id: ::lumen_orm::read_aggregate(
+                            row,
+                            "_count_productId",
+                        )?,
+                        quantity: ::lumen_orm::read_aggregate(row, "_count_quantity")?,
+                    },
+                    sum: Sums {
+                        order_id: ::lumen_orm::read_aggregate(row, "_sum_orderId")?,
+                        quantity: ::lumen_orm::read_aggregate(row, "_sum_quantity")?,
+                    },
+                    avg: Avgs {
+                        order_id: ::lumen_orm::read_aggregate(row, "_avg_orderId")?,
+                        quantity: ::lumen_orm::read_aggregate(row, "_avg_quantity")?,
+                    },
+                    min: Mins {
+                        order_id: ::lumen_orm::read_aggregate(row, "_min_orderId")?,
+                        quantity: ::lumen_orm::read_aggregate(row, "_min_quantity")?,
+                    },
+                    max: Maxes {
+                        order_id: ::lumen_orm::read_aggregate(row, "_max_orderId")?,
+                        quantity: ::lumen_orm::read_aggregate(row, "_max_quantity")?,
+                    },
+                })
+            }
+        }
+        impl<'r> ::lumen_orm::sqlx::FromRow<'r, ::lumen_orm::sqlx::postgres::PgRow>
+        for Aggregate {
+            fn from_row(
+                row: &'r ::lumen_orm::sqlx::postgres::PgRow,
+            ) -> ::core::result::Result<Self, ::lumen_orm::sqlx::Error> {
+                Self::read(row)
+            }
+        }
+        impl<'r> ::lumen_orm::sqlx::FromRow<'r, ::lumen_orm::sqlx::postgres::PgRow>
+        for Group {
+            fn from_row(
+                row: &'r ::lumen_orm::sqlx::postgres::PgRow,
+            ) -> ::core::result::Result<Self, ::lumen_orm::sqlx::Error> {
+                Ok(Self {
+                    key: Key {
+                        order_id: ::lumen_orm::read_aggregate(row, "orderId")?,
+                        product_id: ::lumen_orm::read_aggregate(row, "productId")?,
+                        quantity: ::lumen_orm::read_aggregate(row, "quantity")?,
+                    },
+                    values: Aggregate::read(row)?,
+                })
+            }
+        }
+    }
+    impl<R: ::lumen_orm::Run> Actions<R> {
+        /// Count, sum, average, min and max over the records that match, in one statement:
+        /// `db.order().aggregate().count().value(order::total::sum()).exec()`.
+        pub fn aggregate(self) -> aggregates::Query<R> {
+            ::lumen_orm::AggregateQuery::new(self.run, table())
+        }
+        /// Aggregate values per group of records sharing `columns`:
+        /// `db.order().group_by([order::status::COLUMN]).count().exec()`.
+        pub fn group_by<'a>(
+            self,
+            columns: impl IntoIterator<Item = &'a str>,
+        ) -> aggregates::GroupBy<R> {
+            ::lumen_orm::GroupByQuery::new(self.run, table(), columns)
         }
     }
     /// A `OrderLine` with its `order`.
