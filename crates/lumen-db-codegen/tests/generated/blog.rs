@@ -955,19 +955,11 @@ pub mod user {
         /// Tags this model's aggregate values and conditions, and names its result types.
         #[derive(Debug, Clone, Copy)]
         pub struct Model;
-        impl ::lumen_orm::AggModel for Model {
-            type Aggregate = Aggregate;
-            type Group = Group;
-        }
         /// An aggregate value: `count()`, or `count()`, `sum()`, `avg()`, `min()`, `max()` of a
         /// field, for example `order::total::sum()`.
         pub type Value = ::lumen_orm::AggValue<Model>;
         /// A condition on groups.
         pub type Having = ::lumen_orm::Having<Model>;
-        /// The builder `aggregate()` returns.
-        pub type Query<R> = ::lumen_orm::AggregateQuery<R, Model>;
-        /// The builder `group_by()` returns.
-        pub type GroupBy<R> = ::lumen_orm::GroupByQuery<R, Model>;
         /// `COUNT(*)`: the number of records (in each group).
         pub fn count() -> Value {
             Value::new(::lumen_orm::Agg::count_all())
@@ -1028,7 +1020,7 @@ pub mod user {
             /// `updatedAt`.
             pub updated_at: Option<::lumen_orm::time::PrimitiveDateTime>,
         }
-        /// The group's values of the `group_by` columns; the others are `None`.
+        /// The group's values of the `group_by` fields; the others are `None`.
         #[derive(Debug, Clone, PartialEq, Default)]
         pub struct Key {
             /// `id`.
@@ -1045,7 +1037,7 @@ pub mod user {
             pub updated_at: Option<::lumen_orm::time::PrimitiveDateTime>,
         }
         /// The aggregate values asked for; the rest are `None`, and so are sums, averages and
-        /// extremes over no rows.
+        /// extremes over no records.
         #[derive(Debug, Clone, PartialEq, Default)]
         pub struct Aggregate {
             /// `count()`: the number of records.
@@ -1061,6 +1053,22 @@ pub mod user {
             /// `<field>::max()`.
             pub max: Maxes,
         }
+        /// One group of `group_by()`: its key and its aggregate values.
+        #[derive(Debug, Clone, PartialEq, Default)]
+        pub struct Group {
+            /// The values the group's records share.
+            pub key: Key,
+            /// The aggregate values over the group.
+            pub values: Aggregate,
+        }
+        impl ::lumen_orm::AggModel for Model {
+            type Aggregate = Aggregate;
+            type Group = Group;
+        }
+        /// The builder `aggregate()` returns.
+        pub type Query<R> = ::lumen_orm::AggregateQuery<R, Model>;
+        /// The builder `group_by()` returns.
+        pub type GroupBy<R> = ::lumen_orm::GroupByQuery<R, Model>;
         impl Aggregate {
             fn read(
                 row: &::lumen_orm::sqlx::postgres::PgRow,
@@ -1111,14 +1119,6 @@ pub mod user {
             ) -> ::core::result::Result<Self, ::lumen_orm::sqlx::Error> {
                 Self::read(row)
             }
-        }
-        /// One group of `group_by()`: its key and its aggregate values.
-        #[derive(Debug, Clone, PartialEq, Default)]
-        pub struct Group {
-            /// The values the group's records share.
-            pub key: Key,
-            /// The aggregate values over the group.
-            pub values: Aggregate,
         }
         impl<'r> ::lumen_orm::sqlx::FromRow<'r, ::lumen_orm::sqlx::postgres::PgRow>
         for Group {
@@ -2022,19 +2022,11 @@ pub mod profile {
         /// Tags this model's aggregate values and conditions, and names its result types.
         #[derive(Debug, Clone, Copy)]
         pub struct Model;
-        impl ::lumen_orm::AggModel for Model {
-            type Aggregate = Aggregate;
-            type Group = Group;
-        }
         /// An aggregate value: `count()`, or `count()`, `sum()`, `avg()`, `min()`, `max()` of a
         /// field, for example `order::total::sum()`.
         pub type Value = ::lumen_orm::AggValue<Model>;
         /// A condition on groups.
         pub type Having = ::lumen_orm::Having<Model>;
-        /// The builder `aggregate()` returns.
-        pub type Query<R> = ::lumen_orm::AggregateQuery<R, Model>;
-        /// The builder `group_by()` returns.
-        pub type GroupBy<R> = ::lumen_orm::GroupByQuery<R, Model>;
         /// `COUNT(*)`: the number of records (in each group).
         pub fn count() -> Value {
             Value::new(::lumen_orm::Agg::count_all())
@@ -2085,7 +2077,7 @@ pub mod profile {
             /// `userId`.
             pub user_id: Option<i32>,
         }
-        /// The group's values of the `group_by` columns; the others are `None`.
+        /// The group's values of the `group_by` fields; the others are `None`.
         #[derive(Debug, Clone, PartialEq, Default)]
         pub struct Key {
             /// `id`.
@@ -2096,7 +2088,7 @@ pub mod profile {
             pub user_id: Option<i32>,
         }
         /// The aggregate values asked for; the rest are `None`, and so are sums, averages and
-        /// extremes over no rows.
+        /// extremes over no records.
         #[derive(Debug, Clone, PartialEq, Default)]
         pub struct Aggregate {
             /// `count()`: the number of records.
@@ -2112,6 +2104,22 @@ pub mod profile {
             /// `<field>::max()`.
             pub max: Maxes,
         }
+        /// One group of `group_by()`: its key and its aggregate values.
+        #[derive(Debug, Clone, PartialEq, Default)]
+        pub struct Group {
+            /// The values the group's records share.
+            pub key: Key,
+            /// The aggregate values over the group.
+            pub values: Aggregate,
+        }
+        impl ::lumen_orm::AggModel for Model {
+            type Aggregate = Aggregate;
+            type Group = Group;
+        }
+        /// The builder `aggregate()` returns.
+        pub type Query<R> = ::lumen_orm::AggregateQuery<R, Model>;
+        /// The builder `group_by()` returns.
+        pub type GroupBy<R> = ::lumen_orm::GroupByQuery<R, Model>;
         impl Aggregate {
             fn read(
                 row: &::lumen_orm::sqlx::postgres::PgRow,
@@ -2151,14 +2159,6 @@ pub mod profile {
             ) -> ::core::result::Result<Self, ::lumen_orm::sqlx::Error> {
                 Self::read(row)
             }
-        }
-        /// One group of `group_by()`: its key and its aggregate values.
-        #[derive(Debug, Clone, PartialEq, Default)]
-        pub struct Group {
-            /// The values the group's records share.
-            pub key: Key,
-            /// The aggregate values over the group.
-            pub values: Aggregate,
         }
         impl<'r> ::lumen_orm::sqlx::FromRow<'r, ::lumen_orm::sqlx::postgres::PgRow>
         for Group {
@@ -3204,19 +3204,11 @@ pub mod post {
         /// Tags this model's aggregate values and conditions, and names its result types.
         #[derive(Debug, Clone, Copy)]
         pub struct Model;
-        impl ::lumen_orm::AggModel for Model {
-            type Aggregate = Aggregate;
-            type Group = Group;
-        }
         /// An aggregate value: `count()`, or `count()`, `sum()`, `avg()`, `min()`, `max()` of a
         /// field, for example `order::total::sum()`.
         pub type Value = ::lumen_orm::AggValue<Model>;
         /// A condition on groups.
         pub type Having = ::lumen_orm::Having<Model>;
-        /// The builder `aggregate()` returns.
-        pub type Query<R> = ::lumen_orm::AggregateQuery<R, Model>;
-        /// The builder `group_by()` returns.
-        pub type GroupBy<R> = ::lumen_orm::GroupByQuery<R, Model>;
         /// `COUNT(*)`: the number of records (in each group).
         pub fn count() -> Value {
             Value::new(::lumen_orm::Agg::count_all())
@@ -3285,7 +3277,7 @@ pub mod post {
             /// `views`.
             pub views: Option<i64>,
         }
-        /// The group's values of the `group_by` columns; the others are `None`.
+        /// The group's values of the `group_by` fields; the others are `None`.
         #[derive(Debug, Clone, PartialEq, Default)]
         pub struct Key {
             /// `id`.
@@ -3302,7 +3294,7 @@ pub mod post {
             pub views: Option<i64>,
         }
         /// The aggregate values asked for; the rest are `None`, and so are sums, averages and
-        /// extremes over no rows.
+        /// extremes over no records.
         #[derive(Debug, Clone, PartialEq, Default)]
         pub struct Aggregate {
             /// `count()`: the number of records.
@@ -3318,6 +3310,22 @@ pub mod post {
             /// `<field>::max()`.
             pub max: Maxes,
         }
+        /// One group of `group_by()`: its key and its aggregate values.
+        #[derive(Debug, Clone, PartialEq, Default)]
+        pub struct Group {
+            /// The values the group's records share.
+            pub key: Key,
+            /// The aggregate values over the group.
+            pub values: Aggregate,
+        }
+        impl ::lumen_orm::AggModel for Model {
+            type Aggregate = Aggregate;
+            type Group = Group;
+        }
+        /// The builder `aggregate()` returns.
+        pub type Query<R> = ::lumen_orm::AggregateQuery<R, Model>;
+        /// The builder `group_by()` returns.
+        pub type GroupBy<R> = ::lumen_orm::GroupByQuery<R, Model>;
         impl Aggregate {
             fn read(
                 row: &::lumen_orm::sqlx::postgres::PgRow,
@@ -3366,14 +3374,6 @@ pub mod post {
             ) -> ::core::result::Result<Self, ::lumen_orm::sqlx::Error> {
                 Self::read(row)
             }
-        }
-        /// One group of `group_by()`: its key and its aggregate values.
-        #[derive(Debug, Clone, PartialEq, Default)]
-        pub struct Group {
-            /// The values the group's records share.
-            pub key: Key,
-            /// The aggregate values over the group.
-            pub values: Aggregate,
         }
         impl<'r> ::lumen_orm::sqlx::FromRow<'r, ::lumen_orm::sqlx::postgres::PgRow>
         for Group {
@@ -4004,19 +4004,11 @@ pub mod tag {
         /// Tags this model's aggregate values and conditions, and names its result types.
         #[derive(Debug, Clone, Copy)]
         pub struct Model;
-        impl ::lumen_orm::AggModel for Model {
-            type Aggregate = Aggregate;
-            type Group = Group;
-        }
         /// An aggregate value: `count()`, or `count()`, `sum()`, `avg()`, `min()`, `max()` of a
         /// field, for example `order::total::sum()`.
         pub type Value = ::lumen_orm::AggValue<Model>;
         /// A condition on groups.
         pub type Having = ::lumen_orm::Having<Model>;
-        /// The builder `aggregate()` returns.
-        pub type Query<R> = ::lumen_orm::AggregateQuery<R, Model>;
-        /// The builder `group_by()` returns.
-        pub type GroupBy<R> = ::lumen_orm::GroupByQuery<R, Model>;
         /// `COUNT(*)`: the number of records (in each group).
         pub fn count() -> Value {
             Value::new(::lumen_orm::Agg::count_all())
@@ -4045,14 +4037,14 @@ pub mod tag {
             /// `name`.
             pub name: Option<String>,
         }
-        /// The group's values of the `group_by` columns; the others are `None`.
+        /// The group's values of the `group_by` fields; the others are `None`.
         #[derive(Debug, Clone, PartialEq, Default)]
         pub struct Key {
             /// `name`.
             pub name: Option<String>,
         }
         /// The aggregate values asked for; the rest are `None`, and so are sums, averages and
-        /// extremes over no rows.
+        /// extremes over no records.
         #[derive(Debug, Clone, PartialEq, Default)]
         pub struct Aggregate {
             /// `count()`: the number of records.
@@ -4068,6 +4060,22 @@ pub mod tag {
             /// `<field>::max()`.
             pub max: Maxes,
         }
+        /// One group of `group_by()`: its key and its aggregate values.
+        #[derive(Debug, Clone, PartialEq, Default)]
+        pub struct Group {
+            /// The values the group's records share.
+            pub key: Key,
+            /// The aggregate values over the group.
+            pub values: Aggregate,
+        }
+        impl ::lumen_orm::AggModel for Model {
+            type Aggregate = Aggregate;
+            type Group = Group;
+        }
+        /// The builder `aggregate()` returns.
+        pub type Query<R> = ::lumen_orm::AggregateQuery<R, Model>;
+        /// The builder `group_by()` returns.
+        pub type GroupBy<R> = ::lumen_orm::GroupByQuery<R, Model>;
         impl Aggregate {
             fn read(
                 row: &::lumen_orm::sqlx::postgres::PgRow,
@@ -4095,14 +4103,6 @@ pub mod tag {
             ) -> ::core::result::Result<Self, ::lumen_orm::sqlx::Error> {
                 Self::read(row)
             }
-        }
-        /// One group of `group_by()`: its key and its aggregate values.
-        #[derive(Debug, Clone, PartialEq, Default)]
-        pub struct Group {
-            /// The values the group's records share.
-            pub key: Key,
-            /// The aggregate values over the group.
-            pub values: Aggregate,
         }
         impl<'r> ::lumen_orm::sqlx::FromRow<'r, ::lumen_orm::sqlx::postgres::PgRow>
         for Group {

@@ -233,7 +233,7 @@ impl Aggregate {
         w.done()
     }
 
-    fn has_tail(&self) -> bool {
+    pub(crate) fn has_tail(&self) -> bool {
         !self.order.is_empty() || self.limit.is_some() || self.offset.is_some()
     }
 
@@ -279,9 +279,9 @@ pub trait AggModel {
     type Group: for<'r> sqlx::FromRow<'r, sqlx::postgres::PgRow> + Send + Unpin;
 }
 
-type Tag<M> = PhantomData<fn() -> M>;
+pub(crate) type Tag<M> = PhantomData<fn() -> M>;
 
-fn add(values: &mut Vec<Agg>, v: Agg) {
+pub(crate) fn add(values: &mut Vec<Agg>, v: Agg) {
     if !values.contains(&v) {
         values.push(v);
     }
@@ -359,8 +359,8 @@ impl<M> std::fmt::Debug for AggValue<M> {
 /// A condition on the groups of model `M`: on an aggregate value (`order::total::sum().gt(100)`),
 /// or on a group column through a plain filter (`order::status::equals(..)`).
 pub struct Having<M> {
-    values: Vec<Agg>,
-    filter: Filter,
+    pub(crate) values: Vec<Agg>,
+    pub(crate) filter: Filter,
     tag: Tag<M>,
 }
 
@@ -395,7 +395,144 @@ impl<M> Having<M> {
 }
 
 /// Groups of model `M` ordered by an aggregate value: `order::total::sum().desc()`.
-pub struct AggOrder<M>(Agg, Order, Tag<M>);
+pub struct AggOrder<M>(pub(crate) Agg, pub(crate) Order, Tag<M>);
+
+/// The builder methods `aggregate()` queries share on every database.
+macro_rules! aggregate_methods {
+    () => {
+        /// Only records matching `f` (combined with earlier filters by AND).
+        #[must_use]
+        pub fn filter(mut self, f: $crate::Filter) -> Self {
+            self.query.filter = Some(match self.query.filter.take() {
+                Some(e) => e.and(f),
+                None => f,
+            });
+            self
+        }
+
+        /// Compute `v`.
+        #[must_use]
+        pub fn value(mut self, v: $crate::AggValue<M>) -> Self {
+            $crate::aggregate::add(&mut self.query.values, v.0);
+            self
+        }
+
+        /// Count the records.
+        #[must_use]
+        pub fn count(self) -> Self {
+            self.value($crate::AggValue::new($crate::Agg::count_all()))
+        }
+
+        /// Order the records before `take` and `skip` pick them.
+        #[must_use]
+        pub fn order_by(mut self, order: (String, $crate::Order)) -> Self {
+            self.query.order.push(order);
+            self
+        }
+
+        /// Aggregate at most `n` records.
+        #[must_use]
+        pub fn take(mut self, n: i64) -> Self {
+            self.query.limit = Some(n);
+            self
+        }
+
+        /// Skip the first `n` records.
+        #[must_use]
+        pub fn skip(mut self, n: i64) -> Self {
+            self.query.offset = Some(n);
+            self
+        }
+
+        /// The statement, for logging or running elsewhere.
+        #[must_use]
+        pub fn statement(&self) -> &$crate::Aggregate {
+            &self.query
+        }
+    };
+}
+
+/// The builder methods `group_by()` queries share on every database.
+macro_rules! group_by_methods {
+    () => {
+        /// Only records matching `f` (combined with earlier filters by AND).
+        #[must_use]
+        pub fn filter(mut self, f: $crate::Filter) -> Self {
+            self.query.filter = Some(match self.query.filter.take() {
+                Some(e) => e.and(f),
+                None => f,
+            });
+            self
+        }
+
+        /// Compute `v` for each group.
+        #[must_use]
+        pub fn value(mut self, v: $crate::AggValue<M>) -> Self {
+            $crate::aggregate::add(&mut self.query.values, v.0);
+            self
+        }
+
+        /// Count the records of each group.
+        #[must_use]
+        pub fn count(self) -> Self {
+            self.value($crate::AggValue::new($crate::Agg::count_all()))
+        }
+
+        /// Only groups where `h` holds (combined with earlier conditions by AND). Values it
+        /// names are computed too.
+        #[must_use]
+        pub fn having(mut self, h: impl Into<$crate::Having<M>>) -> Self {
+            let h = h.into();
+            for v in h.values {
+                $crate::aggregate::add(&mut self.query.values, v);
+            }
+            self.query.having = Some(match self.query.having.take() {
+                Some(e) => e.and(h.filter),
+                None => h.filter,
+            });
+            self
+        }
+
+        /// Order the groups by a `group_by` column: `order::status::asc()`.
+        #[must_use]
+        pub fn order_by(mut self, order: (String, $crate::Order)) -> Self {
+            self.query.order.push(order);
+            self
+        }
+
+        /// Order the groups by an aggregate value (`order::total::sum().desc()`), computing it
+        /// too.
+        #[must_use]
+        pub fn order_by_value(mut self, order: $crate::AggOrder<M>) -> Self {
+            let alias = order.0.alias();
+            $crate::aggregate::add(&mut self.query.values, order.0);
+            self.query.order.push((alias, order.1));
+            self
+        }
+
+        /// At most `n` groups.
+        #[must_use]
+        pub fn take(mut self, n: i64) -> Self {
+            self.query.limit = Some(n);
+            self
+        }
+
+        /// Skip the first `n` groups.
+        #[must_use]
+        pub fn skip(mut self, n: i64) -> Self {
+            self.query.offset = Some(n);
+            self
+        }
+
+        /// The statement, for logging or running elsewhere.
+        #[must_use]
+        pub fn statement(&self) -> &$crate::Aggregate {
+            &self.query
+        }
+    };
+}
+
+pub(crate) use {aggregate_methods, group_by_methods};
 
 /// `aggregate()`: values over the records of `M` that match, in one statement.
 pub struct AggregateQuery<R, M> {
@@ -415,55 +552,7 @@ impl<R: Run, M: AggModel> AggregateQuery<R, M> {
         }
     }
 
-    /// Only records matching `f` (combined with earlier filters by AND).
-    #[must_use]
-    pub fn filter(mut self, f: Filter) -> Self {
-        self.query.filter = Some(match self.query.filter.take() {
-            Some(e) => e.and(f),
-            None => f,
-        });
-        self
-    }
-
-    /// Compute `v`.
-    #[must_use]
-    pub fn value(mut self, v: AggValue<M>) -> Self {
-        add(&mut self.query.values, v.0);
-        self
-    }
-
-    /// Count the records.
-    #[must_use]
-    pub fn count(self) -> Self {
-        self.value(AggValue::new(Agg::count_all()))
-    }
-
-    /// Order the records before `take` and `skip` pick them.
-    #[must_use]
-    pub fn order_by(mut self, order: (String, Order)) -> Self {
-        self.query.order.push(order);
-        self
-    }
-
-    /// Aggregate at most `n` records.
-    #[must_use]
-    pub fn take(mut self, n: i64) -> Self {
-        self.query.limit = Some(n);
-        self
-    }
-
-    /// Skip the first `n` records.
-    #[must_use]
-    pub fn skip(mut self, n: i64) -> Self {
-        self.query.offset = Some(n);
-        self
-    }
-
-    /// The statement, for logging or running elsewhere.
-    #[must_use]
-    pub fn statement(&self) -> &Aggregate {
-        &self.query
-    }
+    aggregate_methods!();
 
     /// Run it. Without any value asked for, it counts.
     ///
@@ -494,79 +583,7 @@ impl<R: Run, M: AggModel> GroupByQuery<R, M> {
         }
     }
 
-    /// Only records matching `f` (combined with earlier filters by AND).
-    #[must_use]
-    pub fn filter(mut self, f: Filter) -> Self {
-        self.query.filter = Some(match self.query.filter.take() {
-            Some(e) => e.and(f),
-            None => f,
-        });
-        self
-    }
-
-    /// Compute `v` for each group.
-    #[must_use]
-    pub fn value(mut self, v: AggValue<M>) -> Self {
-        add(&mut self.query.values, v.0);
-        self
-    }
-
-    /// Count the records of each group.
-    #[must_use]
-    pub fn count(self) -> Self {
-        self.value(AggValue::new(Agg::count_all()))
-    }
-
-    /// Only groups where `h` holds (combined with earlier conditions by AND). Values it names
-    /// are computed too.
-    #[must_use]
-    pub fn having(mut self, h: impl Into<Having<M>>) -> Self {
-        let h = h.into();
-        for v in h.values {
-            add(&mut self.query.values, v);
-        }
-        self.query.having = Some(match self.query.having.take() {
-            Some(e) => e.and(h.filter),
-            None => h.filter,
-        });
-        self
-    }
-
-    /// Order the groups by a `group_by` column: `order::status::asc()`.
-    #[must_use]
-    pub fn order_by(mut self, order: (String, Order)) -> Self {
-        self.query.order.push(order);
-        self
-    }
-
-    /// Order the groups by an aggregate value (`order::total::sum().desc()`), computing it too.
-    #[must_use]
-    pub fn order_by_value(mut self, order: AggOrder<M>) -> Self {
-        let alias = order.0.alias();
-        add(&mut self.query.values, order.0);
-        self.query.order.push((alias, order.1));
-        self
-    }
-
-    /// At most `n` groups.
-    #[must_use]
-    pub fn take(mut self, n: i64) -> Self {
-        self.query.limit = Some(n);
-        self
-    }
-
-    /// Skip the first `n` groups.
-    #[must_use]
-    pub fn skip(mut self, n: i64) -> Self {
-        self.query.offset = Some(n);
-        self
-    }
-
-    /// The statement, for logging or running elsewhere.
-    #[must_use]
-    pub fn statement(&self) -> &Aggregate {
-        &self.query
-    }
+    group_by_methods!();
 
     /// Run it: one statement, one group per row.
     ///

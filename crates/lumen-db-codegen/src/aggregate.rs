@@ -118,6 +118,7 @@ fn values_struct(
     name: &str,
     doc: &str,
     fields: &[(&Field, TokenStream, String)],
+    reader: &TokenStream,
 ) -> (TokenStream, TokenStream) {
     let name = ident(name);
     let decl = fields.iter().map(|(f, ty, _)| {
@@ -127,7 +128,7 @@ fn values_struct(
     });
     let reads = fields.iter().map(|(f, _, alias)| {
         let id = ident(&snake(&f.name));
-        quote!(#id: ::lumen_orm::read_aggregate(row, #alias)?,)
+        quote!(#id: #reader(row, #alias)?,)
     });
     let decl = quote! {
         #[doc = #doc]
@@ -142,8 +143,9 @@ fn alias(func: &str, f: &Field) -> String {
     format!("_{func}_{}", f.database_name())
 }
 
-/// The model's `aggregates` module and the `aggregate()` / `group_by()` actions.
-pub(crate) fn model_code(schema: &Schema, model: &Model) -> TokenStream {
+/// The model's `aggregates` module and the `aggregate()` / `group_by()` actions, for Postgres or
+/// MongoDB.
+pub(crate) fn model_code(schema: &Schema, model: &Model, mongo: bool) -> TokenStream {
     let m = ident(&module_name(model));
     let cols: Vec<&Field> = columns(schema, model).into_iter().map(|(f, _)| f).collect();
     let pick = |func: &str, ty: &dyn Fn(&Field) -> Option<TokenStream>| {
@@ -152,17 +154,33 @@ pub(crate) fn model_code(schema: &Schema, model: &Model) -> TokenStream {
             .collect::<Vec<_>>()
     };
     let own = |f: &Field| base_type_at(schema, f, 2);
+    // MongoDB keeps decimals as Decimal128; Postgres reads numeric as rust_decimal
+    let decimal = |t: TokenStream| {
+        if mongo && t.to_string().contains("Decimal") {
+            quote!(::lumen_orm::mongo::Decimal128)
+        } else {
+            t
+        }
+    };
+    let reader = if mongo {
+        quote!(::lumen_orm::mongo::read_aggregate)
+    } else {
+        quote!(::lumen_orm::read_aggregate)
+    };
     let counts = pick("count", &|f| countable(f).then(|| quote!(i64)));
-    let sums = pick("sum", &|f| sum_type(f).map(|(t, _)| t));
-    let avgs = pick("avg", &|f| avg_type(f).map(|(t, _)| t));
+    let sums = pick("sum", &|f| sum_type(f).map(|(t, _)| decimal(t)));
+    let avgs = pick("avg", &|f| avg_type(f).map(|(t, _)| decimal(t)));
     let mins = pick("min", &|f| if has_min_max(f) { own(f) } else { None });
     let maxes = pick("max", &|f| if has_min_max(f) { own(f) } else { None });
     let (counts_decl, counts_read) =
-        values_struct("Counts", " Non-NULL counts per field.", &counts);
-    let (sums_decl, sums_read) = values_struct("Sums", " Sums per numeric field.", &sums);
-    let (avgs_decl, avgs_read) = values_struct("Avgs", " Averages per numeric field.", &avgs);
-    let (mins_decl, mins_read) = values_struct("Mins", " Smallest values per field.", &mins);
-    let (maxes_decl, maxes_read) = values_struct("Maxes", " Largest values per field.", &maxes);
+        values_struct("Counts", " Non-NULL counts per field.", &counts, &reader);
+    let (sums_decl, sums_read) = values_struct("Sums", " Sums per numeric field.", &sums, &reader);
+    let (avgs_decl, avgs_read) =
+        values_struct("Avgs", " Averages per numeric field.", &avgs, &reader);
+    let (mins_decl, mins_read) =
+        values_struct("Mins", " Smallest values per field.", &mins, &reader);
+    let (maxes_decl, maxes_read) =
+        values_struct("Maxes", " Largest values per field.", &maxes, &reader);
     let keys: Vec<(&Field, TokenStream, String)> = cols
         .iter()
         .filter(|f| f.arity != Arity::List)
@@ -170,9 +188,22 @@ pub(crate) fn model_code(schema: &Schema, model: &Model) -> TokenStream {
         .collect();
     let (key_decl, key_read) = values_struct(
         "Key",
-        " The group's values of the `group_by` columns; the others are `None`.",
+        " The group's values of the `group_by` fields; the others are `None`.",
         &keys,
+        &reader,
     );
+    let read_body = quote! {
+        Ok(Self {
+            count: #reader(row, "_count")?,
+            count_of: #counts_read,
+            sum: #sums_read,
+            avg: #avgs_read,
+            min: #mins_read,
+            max: #maxes_read,
+        })
+    };
+    let backend = backend_code(mongo, &key_read, &read_body);
+    let actions = actions_code(&m, mongo);
     let model_name = &model.name;
     let module_doc = format!(" `aggregate()` and `group_by()` on `{model_name}`.");
     quote! {
@@ -182,20 +213,11 @@ pub(crate) fn model_code(schema: &Schema, model: &Model) -> TokenStream {
             #[derive(Debug, Clone, Copy)]
             pub struct Model;
 
-            impl ::lumen_orm::AggModel for Model {
-                type Aggregate = Aggregate;
-                type Group = Group;
-            }
-
             /// An aggregate value: `count()`, or `count()`, `sum()`, `avg()`, `min()`, `max()` of a
             /// field, for example `order::total::sum()`.
             pub type Value = ::lumen_orm::AggValue<Model>;
             /// A condition on groups.
             pub type Having = ::lumen_orm::Having<Model>;
-            /// The builder `aggregate()` returns.
-            pub type Query<R> = ::lumen_orm::AggregateQuery<R, Model>;
-            /// The builder `group_by()` returns.
-            pub type GroupBy<R> = ::lumen_orm::GroupByQuery<R, Model>;
 
             /// `COUNT(*)`: the number of records (in each group).
             pub fn count() -> Value { Value::new(::lumen_orm::Agg::count_all()) }
@@ -208,7 +230,7 @@ pub(crate) fn model_code(schema: &Schema, model: &Model) -> TokenStream {
             #key_decl
 
             /// The aggregate values asked for; the rest are `None`, and so are sums, averages and
-            /// extremes over no rows.
+            /// extremes over no records.
             #[derive(Debug, Clone, PartialEq, Default)]
             pub struct Aggregate {
                 /// `count()`: the number of records.
@@ -225,25 +247,6 @@ pub(crate) fn model_code(schema: &Schema, model: &Model) -> TokenStream {
                 pub max: Maxes,
             }
 
-            impl Aggregate {
-                fn read(row: &::lumen_orm::sqlx::postgres::PgRow) -> ::core::result::Result<Self, ::lumen_orm::sqlx::Error> {
-                    Ok(Self {
-                        count: ::lumen_orm::read_aggregate(row, "_count")?,
-                        count_of: #counts_read,
-                        sum: #sums_read,
-                        avg: #avgs_read,
-                        min: #mins_read,
-                        max: #maxes_read,
-                    })
-                }
-            }
-
-            impl<'r> ::lumen_orm::sqlx::FromRow<'r, ::lumen_orm::sqlx::postgres::PgRow> for Aggregate {
-                fn from_row(row: &'r ::lumen_orm::sqlx::postgres::PgRow) -> ::core::result::Result<Self, ::lumen_orm::sqlx::Error> {
-                    Self::read(row)
-                }
-            }
-
             /// One group of `group_by()`: its key and its aggregate values.
             #[derive(Debug, Clone, PartialEq, Default)]
             pub struct Group {
@@ -253,24 +256,93 @@ pub(crate) fn model_code(schema: &Schema, model: &Model) -> TokenStream {
                 pub values: Aggregate,
             }
 
+            #backend
+        }
+
+        #actions
+    }
+}
+
+/// The parts of the `aggregates` module that differ between Postgres and MongoDB: the model
+/// trait, the builders and how a result is read.
+fn backend_code(mongo: bool, key_read: &TokenStream, read_body: &TokenStream) -> TokenStream {
+    if mongo {
+        quote! {
+            impl ::lumen_orm::mongo::MongoAggModel for Model {
+                type Aggregate = Aggregate;
+                type Group = Group;
+                fn aggregate(row: &::lumen_orm::mongo::Document) -> ::lumen_orm::Result<Aggregate> { Aggregate::read(row) }
+                fn group(row: &::lumen_orm::mongo::Document) -> ::lumen_orm::Result<Group> {
+                    Ok(Group { key: #key_read, values: Aggregate::read(row)? })
+                }
+            }
+            /// The builder `aggregate()` returns.
+            pub type Query<R> = ::lumen_orm::mongo::MongoAggregateQuery<R, Model>;
+            /// The builder `group_by()` returns.
+            pub type GroupBy<R> = ::lumen_orm::mongo::MongoGroupByQuery<R, Model>;
+            impl Aggregate {
+                fn read(row: &::lumen_orm::mongo::Document) -> ::lumen_orm::Result<Self> { #read_body }
+            }
+        }
+    } else {
+        quote! {
+            impl ::lumen_orm::AggModel for Model {
+                type Aggregate = Aggregate;
+                type Group = Group;
+            }
+            /// The builder `aggregate()` returns.
+            pub type Query<R> = ::lumen_orm::AggregateQuery<R, Model>;
+            /// The builder `group_by()` returns.
+            pub type GroupBy<R> = ::lumen_orm::GroupByQuery<R, Model>;
+            impl Aggregate {
+                fn read(row: &::lumen_orm::sqlx::postgres::PgRow) -> ::core::result::Result<Self, ::lumen_orm::sqlx::Error> { #read_body }
+            }
+            impl<'r> ::lumen_orm::sqlx::FromRow<'r, ::lumen_orm::sqlx::postgres::PgRow> for Aggregate {
+                fn from_row(row: &'r ::lumen_orm::sqlx::postgres::PgRow) -> ::core::result::Result<Self, ::lumen_orm::sqlx::Error> {
+                    Self::read(row)
+                }
+            }
             impl<'r> ::lumen_orm::sqlx::FromRow<'r, ::lumen_orm::sqlx::postgres::PgRow> for Group {
                 fn from_row(row: &'r ::lumen_orm::sqlx::postgres::PgRow) -> ::core::result::Result<Self, ::lumen_orm::sqlx::Error> {
                     Ok(Self { key: #key_read, values: Aggregate::read(row)? })
                 }
             }
         }
+    }
+}
 
-        impl<R: ::lumen_orm::Run> Actions<R> {
-            /// Count, sum, average, min and max over the records that match, in one statement:
-            /// `db.order().aggregate().count().value(order::total::sum()).exec()`.
-            pub fn aggregate(self) -> #m::Query<R> {
-                ::lumen_orm::AggregateQuery::new(self.run, table())
+/// `aggregate()` and `group_by()` on the model's `Actions`.
+fn actions_code(m: &proc_macro2::Ident, mongo: bool) -> TokenStream {
+    if mongo {
+        quote! {
+            impl<R: ::lumen_orm::mongo::MongoRun> Actions<R> {
+                /// Count, sum, average, min and max over the documents that match, in one pipeline:
+                /// `db.order().aggregate().count().value(order::total::sum()).exec()`.
+                pub fn aggregate(self) -> #m::Query<R> {
+                    ::lumen_orm::mongo::MongoAggregateQuery::new(self.run, COLLECTION)
+                }
+
+                /// Aggregate values per group of documents sharing `fields`:
+                /// `db.order().group_by([order::status::COLUMN]).count().exec()`.
+                pub fn group_by<'a>(self, fields: impl IntoIterator<Item = &'a str>) -> #m::GroupBy<R> {
+                    ::lumen_orm::mongo::MongoGroupByQuery::new(self.run, COLLECTION, fields)
+                }
             }
+        }
+    } else {
+        quote! {
+            impl<R: ::lumen_orm::Run> Actions<R> {
+                /// Count, sum, average, min and max over the records that match, in one statement:
+                /// `db.order().aggregate().count().value(order::total::sum()).exec()`.
+                pub fn aggregate(self) -> #m::Query<R> {
+                    ::lumen_orm::AggregateQuery::new(self.run, table())
+                }
 
-            /// Aggregate values per group of records sharing `columns`:
-            /// `db.order().group_by([order::status::COLUMN]).count().exec()`.
-            pub fn group_by<'a>(self, columns: impl IntoIterator<Item = &'a str>) -> #m::GroupBy<R> {
-                ::lumen_orm::GroupByQuery::new(self.run, table(), columns)
+                /// Aggregate values per group of records sharing `columns`:
+                /// `db.order().group_by([order::status::COLUMN]).count().exec()`.
+                pub fn group_by<'a>(self, columns: impl IntoIterator<Item = &'a str>) -> #m::GroupBy<R> {
+                    ::lumen_orm::GroupByQuery::new(self.run, table(), columns)
+                }
             }
         }
     }

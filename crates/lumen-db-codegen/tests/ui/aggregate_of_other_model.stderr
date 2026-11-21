@@ -20,5 +20,9 @@ note: `post::aggregates::Model` is defined in module `crate::db::post::aggregate
 note: method defined here
  --> $WORKSPACE/crates/lumen-orm/src/aggregate.rs
   |
-  |     pub fn value(mut self, v: AggValue<M>) -> Self {
-  |            ^^^^^
+  |         pub fn value(mut self, v: $crate::AggValue<M>) -> Self {
+  |                ^^^^^
+...
+  |     aggregate_methods!();
+  |     -------------------- in this macro invocation
+  = note: this error originates in the macro `aggregate_methods` (in Nightly builds, run with -Z macro-backtrace for more info)

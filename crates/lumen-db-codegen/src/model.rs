@@ -799,7 +799,7 @@ pub fn module(schema: &Schema, model_id: ModelId) -> TokenStream {
     let update = update_input(schema, model);
     let unique = unique_where(schema, model);
     let actions = actions(model);
-    let aggregates = crate::aggregate::model_code(schema, model);
+    let aggregates = crate::aggregate::model_code(schema, model, false);
     let includes = includes(schema, model_id)
         .iter()
         .map(|i| include_code(schema, model, i))
