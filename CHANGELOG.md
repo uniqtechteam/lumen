@@ -6,6 +6,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Added
+
+- `aggregate()` and `group_by()` in the generated client, on Postgres and MongoDB: count, sum,
+  average, min and max over the records a filter matches, or per group, with `having`, ordering
+  by a value and paging of groups. Each runs as one statement (one pipeline on MongoDB). Every
+  field's module has `count()` and, where its type allows them, `sum()`, `avg()`, `min()` and
+  `max()`; results are typed in the model's new `aggregates` module. The query builder has
+  `Aggregate` and `Agg` for dynamic queries.
+
 ## [0.2.1] - 2026-11-21
 
 ### Added
